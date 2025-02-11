@@ -75,6 +75,12 @@ export class MastermindZkApp extends SmartContract {
   }
 
   @method async submitGameProof(proof: StepProgramProof) {
+    const isInitialized = this.account.provedState.getAndRequireEquals();
+    isInitialized.assertTrue('The game has not been initialized yet!');
+
+    const isSolved = this.isSolved.getAndRequireEquals();
+    isSolved.assertFalse('The game secret has already been solved!');
+
     proof.verify();
 
     proof.publicOutput.codeMasterId.assertEquals(
