@@ -16,7 +16,7 @@ import {
 } from './utils';
 import { StepProgram, StepProgramProof } from './stepProgram';
 
-let proofsEnabled = true;
+let proofsEnabled = false;
 
 async function localDeploy(
   zkapp: MastermindZkApp,
@@ -66,9 +66,7 @@ describe('Mastermind ZkApp Tests', () => {
 
   beforeAll(async () => {
     await StepProgram.compile();
-    if (proofsEnabled) {
-      await MastermindZkApp.compile();
-    }
+    await MastermindZkApp.compile();
 
     // Set up the Mina local blockchain
     const Local = await Mina.LocalBlockchain({ proofsEnabled });

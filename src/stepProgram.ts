@@ -42,6 +42,15 @@ const StepProgram = ZkProgram({
   publicOutput: PublicOutputs,
 
   methods: {
+    /**
+     * Creates a new game by setting the secret combination and salt. You can think of this as base case of the recursion.
+     * @param authInputs contains the public key and signature of the code master to verify the authenticity of the caller.
+     * Signature message should be the concatenation of the `unseparatedSecretCombination` and `salt`.
+     * @param maxAttempts maximum number of attempts allowed to solve the secret combination.
+     * @param unseparatedSecretCombination secret combination to be solved by the codebreaker.
+     * @param salt the salt to be used in the hash function to prevent pre-image attacks.
+     * @returns the proof of the new game and the public output.
+     */
     createGame: {
       privateInputs: [UInt8, Field, Field],
       async method(
@@ -90,6 +99,15 @@ const StepProgram = ZkProgram({
       },
     },
 
+    /**
+     * Allows the codebreaker to make a guess and then gives it to the codemaster to provide a clue.
+     * @param authInputs contains the public key and signature of the code breaker to verify the authenticity of the caller.
+     * Signature message should be the concatenation of the `unseparatedGuess` and `turnCount`.
+     * @param previousClue the proof of the previous game state. It contains the last clue given by the codemaster.
+     * @param unseparatedGuess the guess made by the codebreaker.
+     * @returns the proof of the updated game state and the public output.
+     * The codebreaker can only make a guess if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
+     */
     makeGuess: {
       privateInputs: [SelfProof, Field],
       async method(
@@ -152,6 +170,16 @@ const StepProgram = ZkProgram({
       },
     },
 
+    /**
+     * Allows the codemaster to give a clue to the codebreaker based on the guess made.
+     * @param authInputs contains the public key and signature of the code master to verify the authenticity of the caller.
+     * Signature message should be the concatenation of the `unseparatedSecretCombination`, `salt`, and `turnCount`.
+     * @param previousGuess the proof of the previous game state. It contains the last guess made by the codebreaker.
+     * @param unseparatedSecretCombination the secret combination to be solved by the codebreaker.
+     * @param salt the salt to be used in the hash function to prevent pre-image attacks.
+     * @returns the proof of the updated game state and the public output.
+     * The codemaster can only give a clue if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
+     */
     giveClue: {
       privateInputs: [SelfProof, Field, Field],
       async method(

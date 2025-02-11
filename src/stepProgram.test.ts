@@ -1,10 +1,8 @@
 import { Field, PrivateKey, PublicKey, UInt8, Signature, Poseidon } from 'o1js';
 import {
-  deserializeClue,
   compressCombinationDigits,
   separateCombinationDigits,
   serializeClue,
-  getClueFromGuess,
 } from './utils';
 import { StepProgram, StepProgramProof } from './stepProgram';
 
