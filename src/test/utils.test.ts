@@ -2,7 +2,7 @@ import {
   getClueFromGuess,
   separateCombinationDigits,
   validateCombination,
-} from './utils';
+} from '../utils';
 import { Field } from 'o1js';
 
 describe('Provable utilities - unit tests', () => {

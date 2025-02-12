@@ -1,4 +1,4 @@
-import { MastermindZkApp } from './Mastermind';
+import { MastermindZkApp } from '../Mastermind';
 import {
   Field,
   Mina,
@@ -13,8 +13,8 @@ import {
   compressCombinationDigits,
   separateCombinationDigits,
   serializeClue,
-} from './utils';
-import { StepProgram, StepProgramProof } from './stepProgram';
+} from '../utils';
+import { StepProgram, StepProgramProof } from '../stepProgram';
 
 let proofsEnabled = false;
 

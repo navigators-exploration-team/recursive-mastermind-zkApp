@@ -16,7 +16,7 @@ import {
   separateCombinationDigits,
   serializeClue,
   validateCombination,
-} from './utils';
+} from './utils.js';
 
 export { StepProgram, PublicInputs, PublicOutputs, StepProgramProof };
 

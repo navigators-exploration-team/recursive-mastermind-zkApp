@@ -3,8 +3,8 @@ import {
   compressCombinationDigits,
   separateCombinationDigits,
   serializeClue,
-} from './utils';
-import { StepProgram, StepProgramProof } from './stepProgram';
+} from '../utils';
+import { StepProgram, StepProgramProof } from '../stepProgram';
 
 describe('Mastermind ZkProgram Tests', () => {
   let codeMasterKey: PrivateKey,
