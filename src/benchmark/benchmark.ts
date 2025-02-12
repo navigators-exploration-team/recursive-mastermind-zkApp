@@ -89,6 +89,58 @@ function prettifyBenchmarks(result: BenchmarkResults) {
   console.log('--------------------------------------');
 }
 
+function overallScores(benchmarkResults: BenchmarkResults[]) {
+  const totalBenchmarkResults = benchmarkResults.length;
+  const totalStepLength = benchmarkResults.reduce(
+    (sum, result) => sum + result.stepLength,
+    0
+  );
+  const totalTime = benchmarkResults.reduce(
+    (sum, result) => sum + result.totalSeconds,
+    0
+  );
+  const totalCreateGame = benchmarkResults.reduce(
+    (sum, result) => sum + result.createGameSeconds,
+    0
+  );
+  const totalMakeGuess = benchmarkResults.reduce(
+    (sum, result) => sum + result.makeGuessSeconds.reduce((a, b) => a + b, 0),
+    0
+  );
+  const totalGiveClue = benchmarkResults.reduce(
+    (sum, result) => sum + result.giveClueSeconds.reduce((a, b) => a + b, 0),
+    0
+  );
+  const totalSubmitGameProof = benchmarkResults.reduce(
+    (sum, result) => sum + result.submitGameProofSeconds,
+    0
+  );
+
+  console.log('Overall Scores in Seconds');
+  console.table([
+    {
+      Metric: 'Avg Time Each Game Step',
+      Value: totalTime / totalStepLength,
+    },
+    {
+      Metric: 'Avg Time To Create Base Proof',
+      Value: totalCreateGame / totalBenchmarkResults,
+    },
+    {
+      Metric: 'Avg Make Guess Time',
+      Value: totalMakeGuess / totalStepLength,
+    },
+    {
+      Metric: 'Avg Give Clue Time',
+      Value: totalGiveClue / totalStepLength,
+    },
+    {
+      Metric: 'Avg Submit Game Proof Time',
+      Value: totalSubmitGameProof / totalBenchmarkResults,
+    },
+  ]);
+}
+
 interface BenchmarkResults {
   stepLength: number;
   totalSeconds: number;
@@ -143,6 +195,8 @@ async function main() {
   for (let i = 0; i < 15; i += 2) {
     await solveBenchmark(steps.slice(i));
   }
+
+  overallScores(benchmarkResults);
 }
 
 async function solveBenchmark(steps: Field[]) {
