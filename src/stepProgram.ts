@@ -59,16 +59,6 @@ const StepProgram = ZkProgram({
         unseparatedSecretCombination: Field,
         salt: Field
       ) {
-        maxAttempts.assertGreaterThanOrEqual(
-          UInt8.from(5),
-          'The minimum number of attempts allowed is 5!'
-        );
-
-        maxAttempts.assertLessThanOrEqual(
-          UInt8.from(15),
-          'The maximum number of attempts allowed is 15!'
-        );
-
         //! Separate combination digits and validate
         const secretCombination = separateCombinationDigits(
           unseparatedSecretCombination
