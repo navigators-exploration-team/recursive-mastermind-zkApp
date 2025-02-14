@@ -59,6 +59,7 @@ export default function Home() {
         appendFinalLog(
           `Submit Game Proof: ${result.submitGameProofSeconds.toFixed(3)}`
         );
+        appendFinalLog('--------------------------------------');
       };
 
       const overallScores = (benchmarkResults: BenchmarkResults[]) => {
@@ -293,6 +294,8 @@ export default function Home() {
           currentBenchmarkResults.giveClueSeconds.reduce((a, b) => a + b, 0) +
           currentBenchmarkResults.submitGameProofSeconds;
 
+        prettifyBenchmark(currentBenchmarkResults);
+
         return currentBenchmarkResults;
       }
 
@@ -316,18 +319,31 @@ export default function Home() {
 
       const benchmarkResults: BenchmarkResults[] = [];
 
-      for (let i = 0; i < 15; i += 2) {
-        appendFinalLog(`Benchmarking for solved in ${15 - i} steps ...`);
-        let result = await solveBenchmark(1234, steps.slice(i));
-        prettifyBenchmark(result);
-        benchmarkResults.push(result);
-        appendFinalLog('--------------------------------------');
-        appendFinalLog(`Benchmarking for not solved in ${15 - i} steps ...`);
-        result = await solveBenchmark(4321, steps.slice(i));
-        prettifyBenchmark(result);
-        benchmarkResults.push(result);
-        appendFinalLog('--------------------------------------');
-      }
+      // Step length 1
+
+      let result = await solveBenchmark(1234, steps.slice(14));
+      benchmarkResults.push(result);
+      result = await solveBenchmark(4321, steps.slice(14));
+      benchmarkResults.push(result);
+
+      // Step length 5
+
+      result = await solveBenchmark(1234, steps.slice(10));
+      benchmarkResults.push(result);
+      result = await solveBenchmark(4321, steps.slice(10));
+      benchmarkResults.push(result);
+
+      // Step length 10
+      result = await solveBenchmark(1234, steps.slice(5));
+      benchmarkResults.push(result);
+      result = await solveBenchmark(4321, steps.slice(5));
+      benchmarkResults.push(result);
+
+      // Step length 15
+      result = await solveBenchmark(1234, steps);
+      benchmarkResults.push(result);
+      result = await solveBenchmark(4321, steps);
+      benchmarkResults.push(result);
 
       const progressElem = document.getElementById('progress');
       if (progressElem && progressElem.parentNode) {

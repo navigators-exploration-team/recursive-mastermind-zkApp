@@ -195,10 +195,21 @@ async function main() {
     Field.from(1234),
   ];
 
-  for (let i = 0; i < 15; i += 2) {
-    await solveBenchmark(1234, steps.slice(i));
-    await solveBenchmark(4321, steps.slice(i));
-  }
+  // Step Length 1
+  await solveBenchmark(1234, steps.slice(14));
+  await solveBenchmark(4321, steps.slice(14));
+
+  // Step Length 5
+  await solveBenchmark(1234, steps.slice(10));
+  await solveBenchmark(4321, steps.slice(10));
+
+  // Step Length 10
+  await solveBenchmark(1234, steps.slice(5));
+  await solveBenchmark(4321, steps.slice(5));
+
+  // Step Length 15
+  await solveBenchmark(1234, steps);
+  await solveBenchmark(4321, steps);
 
   console.log('Overall Benchmark Results for Solved Games');
   overallScores(benchmarkResults.filter((result) => result.isSolved));
