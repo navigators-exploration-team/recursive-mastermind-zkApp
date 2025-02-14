@@ -37,11 +37,12 @@ async function initializeGame(
 async function createGame(
   zkapp: MastermindZkApp,
   codeMasterKey: PrivateKey,
-  codeMasterSalt: Field
+  codeMasterSalt: Field,
+  secret: number
 ) {
   const codeMasterPubKey = codeMasterKey.toPublicKey();
   const tx = await Mina.transaction(codeMasterPubKey, async () => {
-    await zkapp.createGame(Field(1234), codeMasterSalt);
+    await zkapp.createGame(Field(secret), codeMasterSalt);
   });
 
   await tx.prove();
@@ -80,6 +81,7 @@ function prettifyBenchmarks(result: BenchmarkResults) {
     { Metric: 'Total Seconds', Value: result.totalSeconds.toFixed(3) },
     { Metric: 'Create Game (Avg)', Value: avgCreateGame.toFixed(3) },
     { Metric: 'Make Guess (Avg)', Value: avgMakeGuess.toFixed(3) },
+    { Metric: 'Solved', Value: result.isSolved },
     {
       Metric: 'Submit Game Proof',
       Value: result.submitGameProofSeconds.toFixed(3),
@@ -147,6 +149,7 @@ interface BenchmarkResults {
   createGameSeconds: number;
   makeGuessSeconds: number[];
   giveClueSeconds: number[];
+  isSolved: boolean;
   submitGameProofSeconds: number;
 }
 
@@ -193,13 +196,17 @@ async function main() {
   ];
 
   for (let i = 0; i < 15; i += 2) {
-    await solveBenchmark(steps.slice(i));
+    await solveBenchmark(1234, steps.slice(i));
+    await solveBenchmark(4321, steps.slice(i));
   }
 
-  overallScores(benchmarkResults);
+  console.log('Overall Benchmark Results for Solved Games');
+  overallScores(benchmarkResults.filter((result) => result.isSolved));
+  console.log('Overall Benchmark Results for Unsolved Games');
+  overallScores(benchmarkResults.filter((result) => !result.isSolved));
 }
 
-async function solveBenchmark(steps: Field[]) {
+async function solveBenchmark(secret: number, steps: Field[]) {
   const Local = await Mina.LocalBlockchain();
   Mina.setActiveInstance(Local);
 
@@ -213,7 +220,7 @@ async function solveBenchmark(steps: Field[]) {
   let zkappPrivateKey = PrivateKey.random();
   let zkappAddress = zkappPrivateKey.toPublicKey();
   let zkapp = new MastermindZkApp(zkappAddress);
-  let unseparatedSecretCombination = Field.from(1234);
+  let unseparatedSecretCombination = Field.from(secret);
   let lastProof: StepProgramProof;
 
   let currentBenchmarkResults: BenchmarkResults = {
@@ -222,12 +229,13 @@ async function solveBenchmark(steps: Field[]) {
     createGameSeconds: 0,
     makeGuessSeconds: [],
     giveClueSeconds: [],
+    isSolved: false,
     submitGameProofSeconds: 0,
   };
 
   await localDeploy(zkapp, codeMasterKey, zkappPrivateKey);
   await initializeGame(zkapp, codeMasterKey, 15);
-  await createGame(zkapp, codeMasterKey, codeMasterSalt);
+  await createGame(zkapp, codeMasterKey, codeMasterSalt, secret);
 
   let start = performance.now();
   lastProof = (
@@ -297,6 +305,9 @@ async function solveBenchmark(steps: Field[]) {
   await submitGameProofTx.prove();
   await submitGameProofTx.sign([codeBreakerKey]).send();
   end = performance.now();
+
+  currentBenchmarkResults.isSolved =
+    lastProof.publicOutput.isSolved.toBoolean();
 
   currentBenchmarkResults.submitGameProofSeconds = (end - start) / 1000;
 
