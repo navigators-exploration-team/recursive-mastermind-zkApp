@@ -1,7 +1,7 @@
-import { MastermindZkApp } from '../Mastermind.js';
+import { MastermindZkApp } from '../../Mastermind.js';
 import { Field, Mina, PrivateKey, AccountUpdate, UInt8, Signature } from 'o1js';
 
-import { StepProgram, StepProgramProof } from '../stepProgram.js';
+import { StepProgram, StepProgramProof } from '../../stepProgram.js';
 import { performance } from 'perf_hooks';
 
 async function localDeploy(
