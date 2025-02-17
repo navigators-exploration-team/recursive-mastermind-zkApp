@@ -232,7 +232,7 @@ const StepProgram = ZkProgram({
         const computedSolutionHash = Poseidon.hash([...solution, salt]);
         previousGuess.publicOutput.solutionHash.assertEquals(
           computedSolutionHash,
-          'The secret combination is not compliant with the stored hash on-chain!'
+          'The secret combination is not compliant with the initial hash from game creation!'
         );
 
         // get & separate the latest guess

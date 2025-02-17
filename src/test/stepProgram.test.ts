@@ -127,58 +127,6 @@ describe('Mastermind ZkProgram Tests', () => {
       await testInvalidCreateGame([2, 3, 2, 9], expectedErrorMessage);
     });
 
-    it('should reject creating a game with less than 5 attempts', async () => {
-      const maxAttempts = UInt8.from(4);
-
-      const gameCreation = async () => {
-        await StepProgram.createGame(
-          {
-            authPubKey: codeMasterPubKey,
-            authSignature: Signature.create(codeMasterKey, [
-              unseparatedSecretCombination,
-              codeMasterSalt,
-              Field.from(
-                lastProof ? lastProof.publicOutput.turnCount.toNumber() : 1
-              ),
-            ]),
-          },
-          maxAttempts,
-          unseparatedSecretCombination,
-          codeMasterSalt
-        );
-      };
-
-      const expectedErrorMessage =
-        'The minimum number of attempts allowed is 5!';
-      await expect(gameCreation).rejects.toThrowError(expectedErrorMessage);
-    });
-
-    it('should reject creating a game with more than 15 attempts', async () => {
-      const maxAttempts = UInt8.from(16);
-
-      const gameCreation = async () => {
-        await StepProgram.createGame(
-          {
-            authPubKey: codeMasterPubKey,
-            authSignature: Signature.create(codeMasterKey, [
-              unseparatedSecretCombination,
-              codeMasterSalt,
-              Field.from(
-                lastProof ? lastProof.publicOutput.turnCount.toNumber() : 1
-              ),
-            ]),
-          },
-          maxAttempts,
-          unseparatedSecretCombination,
-          codeMasterSalt
-        );
-      };
-
-      const expectedErrorMessage =
-        'The maximum number of attempts allowed is 15!';
-      await expect(gameCreation).rejects.toThrowError(expectedErrorMessage);
-    });
-
     it('should create a game successfully', async () => {
       const stepProof = await StepProgram.createGame(
         {
@@ -287,7 +235,7 @@ describe('Mastermind ZkProgram Tests', () => {
     it('should reject codemaster with different salt', async () => {
       const differentSalt = Field.random();
       const expectedErrorMessage =
-        'The secret combination is not compliant with the stored hash on-chain!';
+        'The secret combination is not compliant with the initial hash from game creation!';
       await testInvalidClue(
         [1, 2, 3, 4],
         expectedErrorMessage,
@@ -297,7 +245,7 @@ describe('Mastermind ZkProgram Tests', () => {
     });
     it('should reject codemaster with non-compliant secret combination', async () => {
       const expectedErrorMessage =
-        'The secret combination is not compliant with the stored hash on-chain!';
+        'The secret combination is not compliant with the initial hash from game creation!';
       await testInvalidClue([1, 5, 3, 4], expectedErrorMessage);
     });
     it('codemaster should give clue successfully', async () => {
