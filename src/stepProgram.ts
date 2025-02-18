@@ -1,17 +1,16 @@
 import {
-  Bool,
   Field,
   Poseidon,
   PublicKey,
   SelfProof,
   Signature,
   Struct,
-  UInt8,
   ZkProgram,
 } from 'o1js';
 
 import {
   checkIfSolved,
+  deserializeClue,
   getClueFromGuess,
   separateCombinationDigits,
   serializeClue,
@@ -31,9 +30,7 @@ class PublicOutputs extends Struct({
   solutionHash: Field,
   lastGuess: Field,
   serializedClue: Field,
-  isSolved: Bool,
-  turnCount: UInt8,
-  maxAttempts: UInt8,
+  turnCount: Field,
 }) {}
 
 const StepProgram = ZkProgram({
@@ -46,16 +43,14 @@ const StepProgram = ZkProgram({
      * Creates a new game by setting the secret combination and salt. You can think of this as base case of the recursion.
      * @param authInputs contains the public key and signature of the code master to verify the authenticity of the caller.
      * Signature message should be the concatenation of the `unseparatedSecretCombination` and `salt`.
-     * @param maxAttempts maximum number of attempts allowed to solve the secret combination.
      * @param unseparatedSecretCombination secret combination to be solved by the codebreaker.
      * @param salt the salt to be used in the hash function to prevent pre-image attacks.
      * @returns the proof of the new game and the public output.
      */
     createGame: {
-      privateInputs: [UInt8, Field, Field],
+      privateInputs: [Field, Field],
       async method(
         authInputs: PublicInputs,
-        maxAttempts: UInt8,
         unseparatedSecretCombination: Field,
         salt: Field
       ) {
@@ -75,16 +70,14 @@ const StepProgram = ZkProgram({
         const codemasterId = Poseidon.hash(authInputs.authPubKey.toFields());
 
         return {
-          publicOutput: {
+          publicOutput: new PublicOutputs({
             codeMasterId: codemasterId,
             codeBreakerId: Field.empty(),
             solutionHash,
             lastGuess: Field.empty(),
             serializedClue: Field.empty(),
-            isSolved: Bool.empty(),
-            turnCount: UInt8.one,
-            maxAttempts,
-          },
+            turnCount: Field.from(1),
+          }),
         };
       },
     },
@@ -111,30 +104,26 @@ const StepProgram = ZkProgram({
 
         //! Verify the signature of code breaker
         authInputs.authSignature
-          .verify(authInputs.authPubKey, [unseparatedGuess, turnCount.value])
+          .verify(authInputs.authPubKey, [unseparatedGuess, turnCount])
           .assertTrue('You are not the codebreaker of this game!');
 
-        //! Assert that the secret combination is not solved yet
-        previousClue.publicOutput.isSolved.assertFalse(
-          'You have already solved the secret combination!'
+        const deserializedClue = deserializeClue(
+          previousClue.publicOutput.serializedClue
         );
+        let isSolved = checkIfSolved(deserializedClue);
+
+        //! Assert that the secret combination is not solved yet
+        isSolved.assertFalse('You have already solved the secret combination!');
 
         //! Only allow codebreaker to call this method following the correct turn sequence
-        const isCodebreakerTurn = turnCount.value.isEven().not();
+        const isCodebreakerTurn = turnCount.isEven().not();
         isCodebreakerTurn.assertTrue(
           'Please wait for the codemaster to give you a clue!'
         );
 
-        //! Assert that the codebreaker has not reached the limit number of attempts
-        const maxAttempts = previousClue.publicOutput.maxAttempts;
-        turnCount.assertLessThan(
-          maxAttempts.mul(2),
-          'You have reached the number limit of attempts to solve the secret combination!'
-        );
-
         //? If first guess ==> set the codebreaker ID
         //? Else           ==> use the previous codebreaker ID
-        const isFirstGuess = turnCount.value.equals(1);
+        const isFirstGuess = turnCount.equals(1);
         const computedCodebreakerId = Poseidon.hash(
           authInputs.authPubKey.toFields()
         );
@@ -150,12 +139,12 @@ const StepProgram = ZkProgram({
         validateCombination(guessDigits);
 
         return {
-          publicOutput: {
+          publicOutput: new PublicOutputs({
             ...previousClue.publicOutput,
             codeBreakerId: computedCodebreakerId,
             lastGuess: unseparatedGuess,
             turnCount: turnCount.add(1),
-          },
+          }),
         };
       },
     },
@@ -187,7 +176,7 @@ const StepProgram = ZkProgram({
           .verify(authInputs.authPubKey, [
             unseparatedSecretCombination,
             salt,
-            turnCount.value,
+            turnCount,
           ])
           .assertTrue(
             'Only the codemaster of this game is allowed to give clue!'
@@ -204,21 +193,9 @@ const StepProgram = ZkProgram({
           'Only the codemaster of this game is allowed to give clue!'
         );
 
-        //! Assert that the codebreaker has not reached the limit number of attempts
-        const maxAttempts = previousGuess.publicOutput.maxAttempts;
-        turnCount.assertLessThanOrEqual(
-          maxAttempts.mul(2),
-          'The codebreaker has finished the number of attempts without solving the secret combination!'
-        );
-
-        //! Assert that the secret combination is not solved yet
-        previousGuess.publicOutput.isSolved.assertFalse(
-          'The codebreaker has already solved the secret combination!'
-        );
-
         //! Assert that the turnCount is pair & not zero for the codemaster to call this method
-        const isNotFirstTurn = turnCount.value.equals(0).not();
-        const isCodemasterTurn = turnCount.value.isEven().and(isNotFirstTurn);
+        const isNotFirstTurn = turnCount.equals(0).not();
+        const isCodemasterTurn = turnCount.isEven().and(isNotFirstTurn);
         isCodemasterTurn.assertTrue(
           'Please wait for the codebreaker to make a guess!'
         );
@@ -242,19 +219,15 @@ const StepProgram = ZkProgram({
         // Scan the guess through the solution and return clue result(hit or blow)
         let clue = getClueFromGuess(guessDigits, solution);
 
-        // Check if the guess is correct & update the on-chain state
-        let isSolved = checkIfSolved(clue);
-
         // Serialize & give the clue
         const serializedClue = serializeClue(clue);
 
         return {
-          publicOutput: {
+          publicOutput: new PublicOutputs({
             ...previousGuess.publicOutput,
             serializedClue,
-            isSolved,
             turnCount: turnCount.add(1),
-          },
+          }),
         };
       },
     },
