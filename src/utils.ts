@@ -8,6 +8,8 @@ export {
   deserializeClue,
   getClueFromGuess,
   checkIfSolved,
+  compressTurnCountMaxAttemptSolved,
+  separateTurnCountAndMaxAttemptSolved,
 };
 
 /**
@@ -163,4 +165,36 @@ function checkIfSolved(clue: Field[]) {
   }
 
   return isSolved;
+}
+
+/**
+ * Combines the turn count, max attempt, and solved flag into a single Field value.
+ *
+ * @param digits - An array of three Field elements representing the turn count, max attempt, and solved flag.
+ * @returns - The combined Field element representing the compressed turn count, max attempt, and solved flag.
+ */
+function compressTurnCountMaxAttemptSolved(digits: Field[]) {
+  digits[0].assertLessThan(100, 'Turn count must be less than 100!');
+  digits[1].assertLessThan(100, 'Max attempt must be less than 100!');
+  digits[2].assertLessThan(2, 'Solved flag must be less than 2!');
+
+  return digits[0].mul(10000).add(digits[1].mul(100).add(digits[2]));
+}
+
+/**
+ * Separates the turn count and max attempt from a single Field value.
+ *
+ * @param value - The Field value to be separated into turn count and max attempt.
+ * @returns - An array of two Field elements representing the separated turn count and max attempt.
+ */
+function separateTurnCountAndMaxAttemptSolved(value: Field) {
+  const digits = Provable.witness(Provable.Array(Field, 3), () => {
+    const num = value.toBigInt();
+
+    return [num / 10000n, (num / 100n) % 100n, num % 100n];
+  });
+
+  compressTurnCountMaxAttemptSolved(digits).assertEquals(value);
+
+  return digits;
 }
