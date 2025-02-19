@@ -9,14 +9,17 @@ import {
   UInt64,
   PublicKey,
   UInt32,
+  Provable,
 } from 'o1js';
 
 import {
   checkIfSolved,
   compressTurnCountMaxAttemptSolved,
   deserializeClue,
+  getClueFromGuess,
   separateCombinationDigits,
   separateTurnCountAndMaxAttemptSolved,
+  serializeClue,
   validateCombination,
 } from './utils.js';
 import { StepProgramProof } from './stepProgram.js';
@@ -40,6 +43,16 @@ export class MastermindZkApp extends SmartContract {
     const accountUpdate = AccountUpdate.create(this.address);
     const tokenBalance = accountUpdate.account.balance.get(); // getAndReqEq ??
     return tokenBalance;
+  }
+
+  @method async assertFinalized() {
+    const currentSlot =
+      this.network.globalSlotSinceGenesis.getAndRequireEquals();
+    const finalizeSlot = this.finalizeSlot.getAndRequireEquals();
+    currentSlot.assertGreaterThanOrEqual(
+      finalizeSlot,
+      'The game has not been finalized yet!'
+    );
   }
 
   /**
@@ -80,6 +93,7 @@ export class MastermindZkApp extends SmartContract {
    * Creates a new game by setting the secret combination and salt.
    * @param unseparatedSecretCombination The secret combination to be solved by the codebreaker.
    * @param salt The salt to be used in the hash function to prevent pre-image attacks.
+   * @param rewardAmount The amount of tokens to be rewarded to the codebreaker upon solving the game.
    * @throws If the game has not been initialized yet, or if the game has already been created.
    */
   @method async createGame(
@@ -223,6 +237,11 @@ export class MastermindZkApp extends SmartContract {
       'The solution hash is not same as the one stored on-chain!'
     );
 
+    proof.publicOutput.turnCount.assertGreaterThan(
+      turnCount,
+      'Cannot submit a proof for a previous turn!'
+    );
+
     const maxAttemptsExceeded = proof.publicOutput.turnCount.greaterThanOrEqual(
       maxAttempts.mul(2)
     );
@@ -250,7 +269,7 @@ export class MastermindZkApp extends SmartContract {
    * Allows the codebreaker to claim the reward if they have solved the game.
    * @throws If the game has not been solved yet, or if the caller is not the codebreaker.
    */
-  @method async claimReward() {
+  @method async claimCodeBreakerReward() {
     let [turnCount, maxAttempts, isSolved] =
       separateTurnCountAndMaxAttemptSolved(
         this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
@@ -258,13 +277,7 @@ export class MastermindZkApp extends SmartContract {
 
     isSolved.assertEquals(1, 'The game has not been solved yet!');
 
-    const currentSlot =
-      this.network.globalSlotSinceGenesis.getAndRequireEquals();
-    const finalizeSlot = this.finalizeSlot.getAndRequireEquals();
-    currentSlot.assertGreaterThanOrEqual(
-      finalizeSlot,
-      'The game has not been finalized yet!'
-    );
+    await this.assertFinalized();
 
     const claimer = this.sender.getAndRequireSignature();
 
@@ -273,7 +286,36 @@ export class MastermindZkApp extends SmartContract {
 
     codeBreakerId.assertEquals(
       computedCodebreakerId,
-      'You are not the codebreaker of this game!'
+      'You are not the codeBreaker of this game!'
+    );
+
+    const rewardAmount = await this.getContractBalance();
+
+    this.send({ to: claimer, amount: rewardAmount });
+  }
+
+  /**
+   * Allows the codemaster to claim the reward if the codebreaker could not solve the game.
+   * @throws If the game has been solved, or if the caller is not the codemaster.
+   */
+  @method async claimCodeMasterReward() {
+    let [turnCount, maxAttempts, isSolved] =
+      separateTurnCountAndMaxAttemptSolved(
+        this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
+      );
+
+    isSolved.assertEquals(0, 'The game has been solved!');
+
+    await this.assertFinalized();
+
+    const claimer = this.sender.getAndRequireSignature();
+
+    const codeMasterId = this.codemasterId.getAndRequireEquals();
+    const computedCodeMasterId = Poseidon.hash(claimer.toFields());
+
+    codeMasterId.assertEquals(
+      computedCodeMasterId,
+      'You are not the codeMaster of this game!'
     );
 
     const rewardAmount = await this.getContractBalance();
@@ -339,5 +381,165 @@ export class MastermindZkApp extends SmartContract {
 
     const rewardAmount = await this.getContractBalance();
     this.send({ to: codeBreakerPubKey, amount: rewardAmount });
+  }
+
+  @method async makeGuess(unseparatedGuess: Field) {
+    const isInitialized = this.account.provedState.getAndRequireEquals();
+    isInitialized.assertTrue('The game has not been initialized yet!');
+
+    const currentSlot =
+      this.network.globalSlotSinceGenesis.getAndRequireEquals();
+    const finalizeSlot = this.finalizeSlot.getAndRequireEquals();
+    currentSlot.assertLessThan(
+      finalizeSlot,
+      'The game has already been finalized!'
+    );
+
+    const [turnCount, maxAttempts, isSolved] =
+      separateTurnCountAndMaxAttemptSolved(
+        this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
+      );
+
+    //! Assert that the secret combination is not solved yet
+    isSolved.assertEquals(0, 'The game secret has already been solved!');
+
+    //! Only allow codebreaker to call this method following the correct turn sequence
+    const isCodebreakerTurn = turnCount.isEven().not();
+    isCodebreakerTurn.assertTrue(
+      'Please wait for the codemaster to give you a clue!'
+    );
+
+    //! Assert that the codebreaker has not reached the limit number of attempts
+    turnCount.assertLessThan(
+      maxAttempts.mul(2),
+      'You have reached the number limit of attempts to solve the secret combination!'
+    );
+
+    // Generate an ID for the caller
+    const computedCodebreakerId = Poseidon.hash(
+      this.sender.getAndRequireSignature().toFields()
+    );
+
+    const setCodeBreakerId = () => {
+      this.codebreakerId.set(computedCodebreakerId);
+      return computedCodebreakerId;
+    };
+
+    //? If first guess ==> set the codebreaker ID
+    //? Else           ==> fetch the codebreaker ID
+    const isFirstGuess = turnCount.equals(1);
+    const codebreakerId = Provable.if(
+      isFirstGuess,
+      setCodeBreakerId(),
+      this.codebreakerId.getAndRequireEquals()
+    );
+
+    //! Restrict method access solely to the correct codebreaker
+    computedCodebreakerId.assertEquals(
+      codebreakerId,
+      'You are not the codebreaker of this game!'
+    );
+
+    //! Separate and validate the guess combination
+    const guessDigits = separateCombinationDigits(unseparatedGuess);
+    validateCombination(guessDigits);
+
+    // Update the on-chain unseparated guess
+    this.unseparatedGuess.set(unseparatedGuess);
+
+    // Increment turnCount and wait for the codemaster to give a clue
+    const updatedTurnCountMaxAttemptsIsSolved =
+      compressTurnCountMaxAttemptSolved([
+        turnCount.add(1),
+        maxAttempts,
+        isSolved,
+      ]);
+
+    this.turnCountMaxAttemptsIsSolved.set(updatedTurnCountMaxAttemptsIsSolved);
+  }
+
+  @method async giveClue(unseparatedSecretCombination: Field, salt: Field) {
+    const isInitialized = this.account.provedState.getAndRequireEquals();
+    isInitialized.assertTrue('The game has not been initialized yet!');
+
+    const currentSlot =
+      this.network.globalSlotSinceGenesis.getAndRequireEquals();
+    const finalizeSlot = this.finalizeSlot.getAndRequireEquals();
+    currentSlot.assertLessThan(
+      finalizeSlot,
+      'The game has already been finalized!'
+    );
+
+    const [turnCount, maxAttempts, isSolved] =
+      separateTurnCountAndMaxAttemptSolved(
+        this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
+      );
+
+    // Generate codemaster ID
+    const computedCodemasterId = Poseidon.hash(
+      this.sender.getAndRequireSignature().toFields()
+    );
+
+    //! Restrict method access solely to the correct codemaster
+    this.codemasterId
+      .getAndRequireEquals()
+      .assertEquals(
+        computedCodemasterId,
+        'Only the codemaster of this game is allowed to give clue!'
+      );
+
+    //! Assert that the codebreaker has not reached the limit number of attempts
+    turnCount.assertLessThanOrEqual(
+      maxAttempts.mul(2),
+      'The codebreaker has finished the number of attempts without solving the secret combination!'
+    );
+
+    //! Assert that the secret combination is not solved yet
+    isSolved.assertEquals(
+      0,
+      'The codebreaker has already solved the secret combination!'
+    );
+
+    //! Assert that the turnCount is pair & not zero for the codemaster to call this method
+    const isNotFirstTurn = turnCount.equals(0).not();
+    const isCodemasterTurn = turnCount.isEven().and(isNotFirstTurn);
+    isCodemasterTurn.assertTrue(
+      'Please wait for the codebreaker to make a guess!'
+    );
+
+    // Separate the secret combination digits
+    const solution = separateCombinationDigits(unseparatedSecretCombination);
+
+    //! Compute solution hash and assert integrity to state on-chain
+    const computedSolutionHash = Poseidon.hash([...solution, salt]);
+    this.solutionHash
+      .getAndRequireEquals()
+      .assertEquals(
+        computedSolutionHash,
+        'The secret combination is not compliant with the stored hash on-chain!'
+      );
+
+    // Fetch & separate the on-chain guess
+    const unseparatedGuess = this.unseparatedGuess.getAndRequireEquals();
+    const guessDigits = separateCombinationDigits(unseparatedGuess);
+
+    // Scan the guess through the solution and return clue result(hit or blow)
+    let clue = getClueFromGuess(guessDigits, solution);
+
+    // Serialize & update the on-chain clue
+    const serializedClue = serializeClue(clue);
+    this.serializedClue.set(serializedClue);
+
+    // Check if the guess is correct & update the on-chain state
+    let isSolvedThisTurn = checkIfSolved(clue).toField();
+    // Increment the on-chain turnCount and update the isSolved state
+    const updatedTurnCountMaxAttemptsIsSolved =
+      compressTurnCountMaxAttemptSolved([
+        turnCount.add(1),
+        maxAttempts,
+        isSolvedThisTurn,
+      ]);
+
+    this.turnCountMaxAttemptsIsSolved.set(updatedTurnCountMaxAttemptsIsSolved);
   }
 }
