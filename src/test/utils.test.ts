@@ -1,4 +1,5 @@
 import {
+  compressTurnCountMaxAttemptSolved,
   getClueFromGuess,
   separateCombinationDigits,
   validateCombination,
@@ -165,6 +166,59 @@ describe('Provable utilities - unit tests', () => {
       const clue = getClueFromGuess(guess, solution);
 
       expect(clue).toEqual([1, 1, 1, 1].map(Field));
+    });
+
+    it('should compress the turn count, max attempt, and solved flag into a single Field value', () => {
+      const turnCount = Field(5);
+      const maxAttempts = Field(10);
+      const isSolved = Field(1);
+
+      const expectedValue = Field(51001);
+      expect(
+        compressTurnCountMaxAttemptSolved([turnCount, maxAttempts, isSolved])
+      ).toEqual(expectedValue);
+    });
+
+    it('should throw an error if the turn count is greater than 100', () => {
+      const turnCount = Field(101);
+      const maxAttempts = Field(10);
+      const isSolved = Field(1);
+
+      const expectedErrorMessage = 'Turn count must be less than 100!';
+      expect(() =>
+        compressTurnCountMaxAttemptSolved([turnCount, maxAttempts, isSolved])
+      ).toThrowError(expectedErrorMessage);
+    });
+
+    it('should throw an error if the max attempt is greater than 100', () => {
+      const turnCount = Field(10);
+      const maxAttempts = Field(101);
+      const isSolved = Field(1);
+
+      const expectedErrorMessage = 'Max attempt must be less than 100!';
+      expect(() =>
+        compressTurnCountMaxAttemptSolved([turnCount, maxAttempts, isSolved])
+      ).toThrowError(expectedErrorMessage);
+    });
+
+    it('should throw an error if the solved flag is greater than 2', () => {
+      const turnCount = Field(10);
+      const maxAttempts = Field(10);
+      const isSolved = Field(2);
+
+      const expectedErrorMessage = 'Solved flag must be less than 2!';
+      expect(() =>
+        compressTurnCountMaxAttemptSolved([turnCount, maxAttempts, isSolved])
+      ).toThrowError(expectedErrorMessage);
+    });
+
+    it('should successfully separate the compressed value into turn count, max attempt, and solved flag', () => {
+      const compressedValue = Field(51001);
+      const expectedDigits = [5, 10, 1].map(Field);
+
+      expect(compressTurnCountMaxAttemptSolved(expectedDigits)).toEqual(
+        compressedValue
+      );
     });
   });
 });
