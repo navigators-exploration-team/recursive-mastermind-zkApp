@@ -1,4 +1,4 @@
-import { Field, PrivateKey, PublicKey, UInt8, Signature, Poseidon } from 'o1js';
+import { Field, PrivateKey, PublicKey, Signature, Poseidon } from 'o1js';
 import {
   compressCombinationDigits,
   separateCombinationDigits,
@@ -38,7 +38,6 @@ describe('Mastermind ZkProgram Tests', () => {
     combination: number[],
     expectedErrorMessage?: string
   ) {
-    const maxAttempts = UInt8.from(5);
     const secretCombination = compressCombinationDigits(combination.map(Field));
 
     const gameCreation = async () => {
@@ -50,7 +49,6 @@ describe('Mastermind ZkProgram Tests', () => {
             codeMasterSalt,
           ]),
         },
-        maxAttempts,
         secretCombination,
         codeMasterSalt
       );
@@ -72,7 +70,7 @@ describe('Mastermind ZkProgram Tests', () => {
           authSignature: Signature.create(signerKey, [
             unseparatedGuess,
             Field.from(
-              lastProof ? lastProof.publicOutput.turnCount.toNumber() : 1
+              lastProof ? lastProof.publicOutput.turnCount.toBigInt() : 1n
             ),
           ]),
         },
@@ -101,7 +99,7 @@ describe('Mastermind ZkProgram Tests', () => {
             unseparatedCombination,
             signerSalt,
             Field.from(
-              lastProof ? lastProof.publicOutput.turnCount.toNumber() : 1
+              lastProof ? lastProof.publicOutput.turnCount.toBigInt() : 1n
             ),
           ]),
         },
@@ -135,11 +133,10 @@ describe('Mastermind ZkProgram Tests', () => {
             unseparatedSecretCombination,
             codeMasterSalt,
             Field.from(
-              lastProof ? lastProof.publicOutput.turnCount.toNumber() : 1
+              lastProof ? lastProof.publicOutput.turnCount.toBigInt() : 1n
             ),
           ]),
         },
-        UInt8.from(5),
         unseparatedSecretCombination,
         codeMasterSalt
       );
@@ -155,9 +152,7 @@ describe('Mastermind ZkProgram Tests', () => {
       );
       expect(publicOutputs.lastGuess).toEqual(Field.empty());
       expect(publicOutputs.serializedClue).toEqual(Field.empty());
-      expect(publicOutputs.isSolved.toBoolean()).toEqual(false);
-      expect(publicOutputs.turnCount.toNumber()).toEqual(1);
-      expect(publicOutputs.maxAttempts.toNumber()).toEqual(5);
+      expect(publicOutputs.turnCount.toBigInt()).toEqual(1n);
 
       lastProof = stepProof.proof;
     });
@@ -190,7 +185,7 @@ describe('Mastermind ZkProgram Tests', () => {
           authSignature: Signature.create(codeBreakerKey, [
             unseparatedGuess,
             Field.from(
-              lastProof ? lastProof.publicOutput.turnCount.toNumber() : 1
+              lastProof ? lastProof.publicOutput.turnCount.toBigInt() : 1n
             ),
           ]),
         },
@@ -207,9 +202,7 @@ describe('Mastermind ZkProgram Tests', () => {
       );
       expect(publicOutputs.lastGuess).toEqual(unseparatedGuess);
       expect(publicOutputs.serializedClue).toEqual(Field.empty());
-      expect(publicOutputs.isSolved.toBoolean()).toEqual(false);
-      expect(publicOutputs.turnCount.toNumber()).toEqual(2);
-      expect(publicOutputs.maxAttempts.toNumber()).toEqual(5);
+      expect(publicOutputs.turnCount.toBigInt()).toEqual(2n);
 
       lastProof = stepProof.proof;
     });
@@ -232,6 +225,7 @@ describe('Mastermind ZkProgram Tests', () => {
         PrivateKey.random()
       );
     });
+
     it('should reject codemaster with different salt', async () => {
       const differentSalt = Field.random();
       const expectedErrorMessage =
@@ -243,11 +237,13 @@ describe('Mastermind ZkProgram Tests', () => {
         differentSalt
       );
     });
+
     it('should reject codemaster with non-compliant secret combination', async () => {
       const expectedErrorMessage =
         'The secret combination is not compliant with the initial hash from game creation!';
       await testInvalidClue([1, 5, 3, 4], expectedErrorMessage);
     });
+
     it('codemaster should give clue successfully', async () => {
       const stepProof = await StepProgram.giveClue(
         {
@@ -256,7 +252,7 @@ describe('Mastermind ZkProgram Tests', () => {
             unseparatedSecretCombination,
             codeMasterSalt,
             Field.from(
-              lastProof ? lastProof.publicOutput.turnCount.toNumber() : 1
+              lastProof ? lastProof.publicOutput.turnCount.toBigInt() : 1n
             ),
           ]),
         },
@@ -276,12 +272,11 @@ describe('Mastermind ZkProgram Tests', () => {
       expect(publicOutputs.serializedClue).toEqual(
         serializeClue([2, 0, 0, 1].map(Field))
       );
-      expect(publicOutputs.isSolved.toBoolean()).toEqual(false);
-      expect(publicOutputs.turnCount.toNumber()).toEqual(3);
-      expect(publicOutputs.maxAttempts.toNumber()).toEqual(5);
+      expect(publicOutputs.turnCount.toBigInt()).toEqual(3n);
 
       lastProof = stepProof.proof;
     });
+
     it('should reject the codemaster from calling this method out of sequence', async () => {
       const expectedErrorMessage =
         'Please wait for the codebreaker to make a guess!';
@@ -298,6 +293,7 @@ describe('Mastermind ZkProgram Tests', () => {
         PrivateKey.random()
       );
     });
+
     it('should accept another valid guess', async () => {
       const secondGuess = [1, 4, 7, 2];
       const unseparatedGuess = compressCombinationDigits(
@@ -310,7 +306,7 @@ describe('Mastermind ZkProgram Tests', () => {
           authSignature: Signature.create(codeBreakerKey, [
             unseparatedGuess,
             Field.from(
-              lastProof ? lastProof.publicOutput.turnCount.toNumber() : 1
+              lastProof ? lastProof.publicOutput.turnCount.toBigInt() : 1n
             ),
           ]),
         },
@@ -321,102 +317,15 @@ describe('Mastermind ZkProgram Tests', () => {
       const publicOutputs = stepProof.proof.publicOutput;
 
       expect(publicOutputs.lastGuess).toEqual(unseparatedGuess);
-      expect(publicOutputs.turnCount.toNumber()).toEqual(4);
+      expect(publicOutputs.turnCount.toBigInt()).toEqual(4n);
 
       lastProof = stepProof.proof;
     });
+
     it('should reject the codebraker from calling this method out of sequence', async () => {
       const expectedErrorMessage =
         'Please wait for the codemaster to give you a clue!';
       await testInvalidGuess([1, 2, 4, 8], expectedErrorMessage);
-    });
-  });
-
-  describe('test game to completion reaching number limit of attempts=5', () => {
-    async function makeGuess(guess: number[]) {
-      const unseparatedGuess = compressCombinationDigits(guess.map(Field));
-
-      const stepProof = await StepProgram.makeGuess(
-        {
-          authPubKey: codeBreakerPubKey,
-          authSignature: Signature.create(codeBreakerKey, [
-            unseparatedGuess,
-            Field.from(
-              lastProof ? lastProof.publicOutput.turnCount.toNumber() : 1
-            ),
-          ]),
-        },
-        lastProof,
-        unseparatedGuess
-      );
-
-      lastProof = stepProof.proof;
-    }
-
-    async function giveClue(expectedClue: number[]) {
-      const stepProof = await StepProgram.giveClue(
-        {
-          authPubKey: codeMasterPubKey,
-          authSignature: Signature.create(codeMasterKey, [
-            unseparatedSecretCombination,
-            codeMasterSalt,
-            Field.from(
-              lastProof ? lastProof.publicOutput.turnCount.toNumber() : 1
-            ),
-          ]),
-        },
-        lastProof,
-        unseparatedSecretCombination,
-        codeMasterSalt
-      );
-
-      const publicOutputs = stepProof.proof.publicOutput;
-
-      expect(publicOutputs.serializedClue).toEqual(
-        serializeClue(expectedClue.map(Field))
-      );
-
-      lastProof = stepProof.proof;
-    }
-
-    it('should give clue of second guess', async () => {
-      await giveClue([2, 1, 0, 1]);
-    });
-
-    it('should make third guess', async () => {
-      await makeGuess([1, 3, 4, 8]);
-    });
-
-    it('should give clue of third guess', async () => {
-      await giveClue([2, 1, 1, 0]);
-    });
-
-    it('should make fourth guess', async () => {
-      await makeGuess([5, 8, 3, 7]);
-    });
-
-    it('should give clue of fourth guess', async () => {
-      await giveClue([0, 0, 2, 0]);
-    });
-
-    it('should make fifth guess', async () => {
-      await makeGuess([9, 1, 2, 4]);
-    });
-
-    it('should give clue of fifth guess', async () => {
-      await giveClue([0, 1, 1, 2]);
-    });
-
-    it('should reject 6th guess: reached limited number of attempts', async () => {
-      const expectedErrorMessage =
-        'You have reached the number limit of attempts to solve the secret combination!';
-      await testInvalidGuess([1, 2, 3, 4], expectedErrorMessage);
-    });
-
-    it('should reject giving 6th clue: reached limited number of attempts', async () => {
-      const expectedErrorMessage =
-        'The codebreaker has finished the number of attempts without solving the secret combination!';
-      await testInvalidClue([2, 2, 2, 2], expectedErrorMessage);
     });
   });
 
@@ -433,7 +342,6 @@ describe('Mastermind ZkProgram Tests', () => {
             codeMasterSalt,
           ]),
         },
-        UInt8.from(5),
         unseparatedSecretCombination,
         codeMasterSalt
       );
@@ -449,12 +357,11 @@ describe('Mastermind ZkProgram Tests', () => {
       );
       expect(publicOutputs.lastGuess).toEqual(Field.empty());
       expect(publicOutputs.serializedClue).toEqual(Field.empty());
-      expect(publicOutputs.isSolved.toBoolean()).toEqual(false);
-      expect(publicOutputs.turnCount.toNumber()).toEqual(1);
-      expect(publicOutputs.maxAttempts.toNumber()).toEqual(5);
+      expect(publicOutputs.turnCount.toBigInt()).toEqual(1n);
 
       lastProof = stepProof.proof;
     });
+
     it('should solve the game in the first round', async () => {
       const firstGuess = [7, 1, 6, 3];
       const unseparatedGuess = compressCombinationDigits(firstGuess.map(Field));
@@ -465,7 +372,7 @@ describe('Mastermind ZkProgram Tests', () => {
           authSignature: Signature.create(codeBreakerKey, [
             unseparatedGuess,
             Field.from(
-              lastProof ? lastProof.publicOutput.turnCount.toNumber() : 1
+              lastProof ? lastProof.publicOutput.turnCount.toBigInt() : 1n
             ),
           ]),
         },
@@ -482,9 +389,7 @@ describe('Mastermind ZkProgram Tests', () => {
       );
       expect(publicOutputs.lastGuess).toEqual(unseparatedGuess);
       expect(publicOutputs.serializedClue).toEqual(Field.empty());
-      expect(publicOutputs.isSolved.toBoolean()).toEqual(false);
-      expect(publicOutputs.turnCount.toNumber()).toEqual(2);
-      expect(publicOutputs.maxAttempts.toNumber()).toEqual(5);
+      expect(publicOutputs.turnCount.toBigInt()).toEqual(2n);
 
       lastProof = stepProof.proof;
     });
@@ -501,7 +406,7 @@ describe('Mastermind ZkProgram Tests', () => {
             unseparatedCombination,
             codeMasterSalt,
             Field.from(
-              lastProof ? lastProof.publicOutput.turnCount.toNumber() : 1
+              lastProof ? lastProof.publicOutput.turnCount.toBigInt() : 1n
             ),
           ]),
         },
@@ -521,10 +426,7 @@ describe('Mastermind ZkProgram Tests', () => {
       expect(publicOutputs.serializedClue).toEqual(
         serializeClue([2, 2, 2, 2].map(Field))
       );
-
-      expect(publicOutputs.isSolved.toBoolean()).toEqual(true);
-      expect(publicOutputs.turnCount.toNumber()).toEqual(3);
-      expect(publicOutputs.maxAttempts.toNumber()).toEqual(5);
+      expect(publicOutputs.turnCount.toBigInt()).toEqual(3n);
 
       lastProof = stepProof.proof;
     });
@@ -537,7 +439,7 @@ describe('Mastermind ZkProgram Tests', () => {
 
     it('should reject next clue: secret is already solved', async () => {
       const expectedErrorMessage =
-        'The codebreaker has already solved the secret combination!';
+        'Please wait for the codebreaker to make a guess!';
       await testInvalidClue([2, 2, 2, 2], expectedErrorMessage);
     });
   });
