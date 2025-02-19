@@ -1,3 +1,4 @@
 import { MastermindZkApp } from './Mastermind.js';
+import { StepProgram, StepProgramProof } from './stepProgram.js';
 
-export { MastermindZkApp };
+export { MastermindZkApp, StepProgramProof, StepProgram };
