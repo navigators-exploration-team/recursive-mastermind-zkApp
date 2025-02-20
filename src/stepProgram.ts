@@ -43,7 +43,7 @@ const StepProgram = ZkProgram({
      * Creates a new game by setting the secret combination and salt. You can think of this as base case of the recursion.
      * @param authInputs contains the public key and signature of the code master to verify the authenticity of the caller.
      * Signature message should be the concatenation of the `unseparatedSecretCombination` and `salt`.
-     * @param unseparatedSecretCombination secret combination to be solved by the codebreaker.
+     * @param unseparatedSecretCombination secret combination to be solved by the codeBreaker.
      * @param salt the salt to be used in the hash function to prevent pre-image attacks.
      * @returns the proof of the new game and the public output.
      */
@@ -67,11 +67,11 @@ const StepProgram = ZkProgram({
           unseparatedSecretCombination,
           salt,
         ]);
-        const codemasterId = Poseidon.hash(authInputs.authPubKey.toFields());
+        const codeMasterId = Poseidon.hash(authInputs.authPubKey.toFields());
 
         return {
           publicOutput: new PublicOutputs({
-            codeMasterId: codemasterId,
+            codeMasterId: codeMasterId,
             codeBreakerId: Field.empty(),
             solutionHash,
             lastGuess: Field.empty(),
@@ -83,13 +83,13 @@ const StepProgram = ZkProgram({
     },
 
     /**
-     * Allows the codebreaker to make a guess and then gives it to the codemaster to provide a clue.
+     * Allows the codeBreaker to make a guess and then gives it to the codeMaster to provide a clue.
      * @param authInputs contains the public key and signature of the code breaker to verify the authenticity of the caller.
      * Signature message should be the concatenation of the `unseparatedGuess` and `turnCount`.
-     * @param previousClue the proof of the previous game state. It contains the last clue given by the codemaster.
-     * @param unseparatedGuess the guess made by the codebreaker.
+     * @param previousClue the proof of the previous game state. It contains the last clue given by the codeMaster.
+     * @param unseparatedGuess the guess made by the codeBreaker.
      * @returns the proof of the updated game state and the public output.
-     * The codebreaker can only make a guess if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
+     * The codeBreaker can only make a guess if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
      */
     makeGuess: {
       privateInputs: [SelfProof, Field],
@@ -105,7 +105,7 @@ const StepProgram = ZkProgram({
         //! Verify the signature of code breaker
         authInputs.authSignature
           .verify(authInputs.authPubKey, [unseparatedGuess, turnCount])
-          .assertTrue('You are not the codebreaker of this game!');
+          .assertTrue('You are not the codeBreaker of this game!');
 
         const deserializedClue = deserializeClue(
           previousClue.publicOutput.serializedClue
@@ -115,24 +115,24 @@ const StepProgram = ZkProgram({
         //! Assert that the secret combination is not solved yet
         isSolved.assertFalse('You have already solved the secret combination!');
 
-        //! Only allow codebreaker to call this method following the correct turn sequence
+        //! Only allow codeBreaker to call this method following the correct turn sequence
         const isCodebreakerTurn = turnCount.isEven().not();
         isCodebreakerTurn.assertTrue(
-          'Please wait for the codemaster to give you a clue!'
+          'Please wait for the codeMaster to give you a clue!'
         );
 
-        //? If first guess ==> set the codebreaker ID
-        //? Else           ==> use the previous codebreaker ID
+        //? If first guess ==> set the codeBreaker ID
+        //? Else           ==> use the previous codeBreaker ID
         const isFirstGuess = turnCount.equals(1);
         const computedCodebreakerId = Poseidon.hash(
           authInputs.authPubKey.toFields()
         );
 
-        //! Restrict method access solely to the correct codebreaker
+        //! Restrict method access solely to the correct codeBreaker
         previousClue.publicOutput.codeBreakerId
           .equals(computedCodebreakerId)
           .or(isFirstGuess)
-          .assertTrue('You are not the codebreaker of this game!');
+          .assertTrue('You are not the codeBreaker of this game!');
 
         //! Separate and validate the guess combination
         const guessDigits = separateCombinationDigits(unseparatedGuess);
@@ -150,14 +150,14 @@ const StepProgram = ZkProgram({
     },
 
     /**
-     * Allows the codemaster to give a clue to the codebreaker based on the guess made.
+     * Allows the codeMaster to give a clue to the codeBreaker based on the guess made.
      * @param authInputs contains the public key and signature of the code master to verify the authenticity of the caller.
      * Signature message should be the concatenation of the `unseparatedSecretCombination`, `salt`, and `turnCount`.
-     * @param previousGuess the proof of the previous game state. It contains the last guess made by the codebreaker.
-     * @param unseparatedSecretCombination the secret combination to be solved by the codebreaker.
+     * @param previousGuess the proof of the previous game state. It contains the last guess made by the codeBreaker.
+     * @param unseparatedSecretCombination the secret combination to be solved by the codeBreaker.
      * @param salt the salt to be used in the hash function to prevent pre-image attacks.
      * @returns the proof of the updated game state and the public output.
-     * The codemaster can only give a clue if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
+     * The codeMaster can only give a clue if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
      */
     giveClue: {
       privateInputs: [SelfProof, Field, Field],
@@ -179,25 +179,25 @@ const StepProgram = ZkProgram({
             turnCount,
           ])
           .assertTrue(
-            'Only the codemaster of this game is allowed to give clue!'
+            'Only the codeMaster of this game is allowed to give clue!'
           );
 
-        // Generate codemaster ID
+        // Generate codeMaster ID
         const computedCodemasterId = Poseidon.hash(
           authInputs.authPubKey.toFields()
         );
 
-        //! Restrict method access solely to the correct codemaster
+        //! Restrict method access solely to the correct codeMaster
         previousGuess.publicOutput.codeMasterId.assertEquals(
           computedCodemasterId,
-          'Only the codemaster of this game is allowed to give clue!'
+          'Only the codeMaster of this game is allowed to give clue!'
         );
 
-        //! Assert that the turnCount is pair & not zero for the codemaster to call this method
+        //! Assert that the turnCount is pair & not zero for the codeMaster to call this method
         const isNotFirstTurn = turnCount.equals(0).not();
         const isCodemasterTurn = turnCount.isEven().and(isNotFirstTurn);
         isCodemasterTurn.assertTrue(
-          'Please wait for the codebreaker to make a guess!'
+          'Please wait for the codeBreaker to make a guess!'
         );
 
         // Separate the secret combination digits
