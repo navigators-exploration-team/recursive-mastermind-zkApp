@@ -24,10 +24,10 @@ describe('Mastermind ZkProgram Tests', () => {
     codeMasterPubKey = codeMasterKey.toPublicKey();
     codeMasterId = Poseidon.hash(codeMasterPubKey.toFields());
 
-    // Generate secret combination for the codemaster
+    // Generate secret combination for the codeMaster
     unseparatedSecretCombination = Field.from(1234);
 
-    // Generate random field as salt for the codemaster
+    // Generate random field as salt for the codeMaster
     codeMasterSalt = Field.random();
 
     codeBreakerKey = PrivateKey.random();
@@ -115,12 +115,12 @@ describe('Mastermind ZkProgram Tests', () => {
   }
 
   describe('createGame method', () => {
-    it('should reject codemaster with invalid secret combination: second digit is 0', async () => {
+    it('should reject codeMaster with invalid secret combination: second digit is 0', async () => {
       const expectedErrorMessage = 'Combination digit 2 should not be zero!';
       await testInvalidCreateGame([5, 0, 4, 6], expectedErrorMessage);
     });
 
-    it('should reject codemaster with invalid secret combination: third digit is not unique', async () => {
+    it('should reject codeMaster with invalid secret combination: third digit is not unique', async () => {
       const expectedErrorMessage = 'Combination digit 3 is not unique!';
       await testInvalidCreateGame([2, 3, 2, 9], expectedErrorMessage);
     });
@@ -159,23 +159,23 @@ describe('Mastermind ZkProgram Tests', () => {
   });
 
   describe('makeGuess method tests: first guess', () => {
-    it('should reject codebreaker with invalid guess combination: fouth digit is 0', async () => {
+    it('should reject codeBreaker with invalid guess combination: fouth digit is 0', async () => {
       const expectedErrorMessage = 'Combination digit 4 should not be zero!';
       await testInvalidGuess([6, 9, 3, 0], expectedErrorMessage);
     });
 
-    it('should reject codebreaker with invalid guess combination: second digit is not unique', async () => {
+    it('should reject codeBreaker with invalid guess combination: second digit is not unique', async () => {
       const expectedErrorMessage = 'Combination digit 2 is not unique!';
       await testInvalidGuess([1, 1, 2, 9], expectedErrorMessage);
     });
 
     it('should reject giveClue in the wrong turn', async () => {
       const expectedErrorMessage =
-        'Please wait for the codebreaker to make a guess!';
+        'Please wait for the codeBreaker to make a guess!';
       await testInvalidClue([1, 2, 3, 4], expectedErrorMessage);
     });
 
-    it('codebreaker should make a guess successfully', async () => {
+    it('codeBreaker should make a guess successfully', async () => {
       const firstGuess = [1, 5, 6, 2];
       const unseparatedGuess = compressCombinationDigits(firstGuess.map(Field));
 
@@ -209,16 +209,16 @@ describe('Mastermind ZkProgram Tests', () => {
 
     it('should reject makeGuess in the wrong turn', async () => {
       const expectedErrorMessage =
-        'Please wait for the codemaster to give you a clue!';
+        'Please wait for the codeMaster to give you a clue!';
 
       await testInvalidGuess([2, 3, 4, 5], expectedErrorMessage);
     });
   });
 
   describe('giveClue method tests', () => {
-    it('should reject any caller other than the codemaster', async () => {
+    it('should reject any caller other than the codeMaster', async () => {
       const expectedErrorMessage =
-        'Only the codemaster of this game is allowed to give clue!';
+        'Only the codeMaster of this game is allowed to give clue!';
       await testInvalidClue(
         [1, 2, 3, 4],
         expectedErrorMessage,
@@ -226,7 +226,7 @@ describe('Mastermind ZkProgram Tests', () => {
       );
     });
 
-    it('should reject codemaster with different salt', async () => {
+    it('should reject codeMaster with different salt', async () => {
       const differentSalt = Field.random();
       const expectedErrorMessage =
         'The secret combination is not compliant with the initial hash from game creation!';
@@ -238,13 +238,13 @@ describe('Mastermind ZkProgram Tests', () => {
       );
     });
 
-    it('should reject codemaster with non-compliant secret combination', async () => {
+    it('should reject codeMaster with non-compliant secret combination', async () => {
       const expectedErrorMessage =
         'The secret combination is not compliant with the initial hash from game creation!';
       await testInvalidClue([1, 5, 3, 4], expectedErrorMessage);
     });
 
-    it('codemaster should give clue successfully', async () => {
+    it('codeMaster should give clue successfully', async () => {
       const stepProof = await StepProgram.giveClue(
         {
           authPubKey: codeMasterPubKey,
@@ -277,16 +277,16 @@ describe('Mastermind ZkProgram Tests', () => {
       lastProof = stepProof.proof;
     });
 
-    it('should reject the codemaster from calling this method out of sequence', async () => {
+    it('should reject the codeMaster from calling this method out of sequence', async () => {
       const expectedErrorMessage =
-        'Please wait for the codebreaker to make a guess!';
+        'Please wait for the codeBreaker to make a guess!';
       await testInvalidClue([1, 2, 3, 4], expectedErrorMessage);
     });
   });
 
   describe('second guess', () => {
-    it('should reject any caller other than the codebreaker', async () => {
-      const expectedErrorMessage = 'You are not the codebreaker of this game!';
+    it('should reject any caller other than the codeBreaker', async () => {
+      const expectedErrorMessage = 'You are not the codeBreaker of this game!';
       await testInvalidGuess(
         [1, 4, 7, 2],
         expectedErrorMessage,
@@ -324,14 +324,14 @@ describe('Mastermind ZkProgram Tests', () => {
 
     it('should reject the codebraker from calling this method out of sequence', async () => {
       const expectedErrorMessage =
-        'Please wait for the codemaster to give you a clue!';
+        'Please wait for the codeMaster to give you a clue!';
       await testInvalidGuess([1, 2, 4, 8], expectedErrorMessage);
     });
   });
 
   describe('new game after completion', () => {
     it('should create a new game successfully with new secret', async () => {
-      // Generate new secret combination for the codemaster
+      // Generate new secret combination for the codeMaster
       unseparatedSecretCombination = Field.from(7163);
 
       const stepProof = await StepProgram.createGame(
@@ -439,7 +439,7 @@ describe('Mastermind ZkProgram Tests', () => {
 
     it('should reject next clue: secret is already solved', async () => {
       const expectedErrorMessage =
-        'Please wait for the codebreaker to make a guess!';
+        'Please wait for the codeBreaker to make a guess!';
       await testInvalidClue([2, 2, 2, 2], expectedErrorMessage);
     });
   });
