@@ -302,6 +302,22 @@ describe('Mastermind ZkApp Tests', () => {
       await localDeploy(zkapp, codeMasterKey, zkappPrivateKey);
     });
 
+    it('Reject sending  Mina to the zkApp without proof', async () => {
+      const sendMinaTx = async () => {
+        const tx = await Mina.transaction(codeMasterPubKey, async () => {
+          const update = AccountUpdate.create(codeBreakerPubKey);
+          update.send({ to: zkappAddress, amount: UInt64.from(100) });
+        });
+
+        await tx.prove();
+        await tx.sign([codeMasterKey]).send();
+      };
+
+      await expect(sendMinaTx()).rejects.toThrow(
+        /Update_not_permitted_balance/
+      );
+    });
+
     it('Reject calling `createGame` method before `initGame`', async () => {
       const createGameTx = async () => {
         const tx = await Mina.transaction(codeMasterPubKey, async () => {

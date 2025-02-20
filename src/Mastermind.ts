@@ -9,6 +9,7 @@ import {
   UInt64,
   PublicKey,
   UInt32,
+  Permissions,
   Provable,
 } from 'o1js';
 
@@ -53,6 +54,19 @@ export class MastermindZkApp extends SmartContract {
       finalizeSlot,
       'The game has not been finalized yet!'
     );
+  }
+
+  async deploy() {
+    await super.deploy();
+
+    this.account.permissions.set({
+      ...Permissions.default(),
+      setVerificationKey:
+        Permissions.VerificationKey.impossibleDuringCurrentVersion(),
+      setPermissions: Permissions.impossible(),
+      send: Permissions.proof(),
+      receive: Permissions.proof(),
+    });
   }
 
   /**
