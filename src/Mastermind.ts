@@ -46,6 +46,9 @@ export class MastermindZkApp extends SmartContract {
     return tokenBalance;
   }
 
+  /**
+   * Asserts that the game has been finalized. For internal use only.
+   */
   @method async assertFinalized() {
     const currentSlot =
       this.network.globalSlotSinceGenesis.getAndRequireEquals();
@@ -162,7 +165,6 @@ export class MastermindZkApp extends SmartContract {
 
   /**
    * Codebreaker accepts the game and pays the reward to contract.
-   * @param rewardPayer The public key of the codeBreaker who will pay the reward.
    * @throws If the game has not been initialized yet, or if the game has not been created yet.
    */
   @method async acceptGame() {
@@ -176,10 +178,9 @@ export class MastermindZkApp extends SmartContract {
         'The game has already been accepted by the codeBreaker!'
       );
 
-    const [turnCount, maxAttempts, isSolved] =
-      separateTurnCountAndMaxAttemptSolved(
-        this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
-      );
+    const [turnCount, ,] = separateTurnCountAndMaxAttemptSolved(
+      this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
+    );
 
     turnCount.assertEquals(1, 'The game has not been created yet!');
 
@@ -284,10 +285,9 @@ export class MastermindZkApp extends SmartContract {
    * @throws If the game has not been solved yet, or if the caller is not the codeBreaker.
    */
   @method async claimCodeBreakerReward() {
-    let [turnCount, maxAttempts, isSolved] =
-      separateTurnCountAndMaxAttemptSolved(
-        this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
-      );
+    let [, , isSolved] = separateTurnCountAndMaxAttemptSolved(
+      this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
+    );
 
     isSolved.assertEquals(1, 'The game has not been solved yet!');
 
@@ -313,10 +313,9 @@ export class MastermindZkApp extends SmartContract {
    * @throws If the game has been solved, or if the caller is not the codeMaster.
    */
   @method async claimCodeMasterReward() {
-    let [turnCount, maxAttempts, isSolved] =
-      separateTurnCountAndMaxAttemptSolved(
-        this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
-      );
+    let [, , isSolved] = separateTurnCountAndMaxAttemptSolved(
+      this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
+    );
 
     isSolved.assertEquals(0, 'The game has been solved!');
 
@@ -397,6 +396,11 @@ export class MastermindZkApp extends SmartContract {
     this.send({ to: codeBreakerPubKey, amount: rewardAmount });
   }
 
+  /**
+   * Allows the codeBreaker to make a guess outside `stepProof` and then gives it to the codeMaster to provide a clue.
+   * @param unseparatedGuess The guess combination made by the codeBreaker.
+   * @throws If the game has not been initialized yet, or if the game has already been finalized.
+   */
   @method async makeGuess(unseparatedGuess: Field) {
     const isInitialized = this.account.provedState.getAndRequireEquals();
     isInitialized.assertTrue('The game has not been initialized yet!');
@@ -472,6 +476,12 @@ export class MastermindZkApp extends SmartContract {
     this.turnCountMaxAttemptsIsSolved.set(updatedTurnCountMaxAttemptsIsSolved);
   }
 
+  /**
+   * Allows the codeMaster to give a clue to the codeBreaker outside `stepProof`.
+   * @param unseparatedSecretCombination The secret combination to be solved by the codeBreaker.
+   * @param salt The salt to be used in the hash function to prevent pre-image attacks.
+   * @throws If the game has not been initialized yet, or if the game has already been finalized.
+   */
   @method async giveClue(unseparatedSecretCombination: Field, salt: Field) {
     const isInitialized = this.account.provedState.getAndRequireEquals();
     isInitialized.assertTrue('The game has not been initialized yet!');
