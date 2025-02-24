@@ -40,7 +40,7 @@ export class MastermindZkApp extends SmartContract {
   /**
    * @returns The balance of the contract.
    */
-  @method.returns(UInt64) async getContractBalance() {
+  async getContractBalance() {
     const accountUpdate = AccountUpdate.create(this.address);
     const tokenBalance = accountUpdate.account.balance.get(); // getAndReqEq ??
     return tokenBalance;
@@ -49,7 +49,7 @@ export class MastermindZkApp extends SmartContract {
   /**
    * Asserts that the game has been finalized. For internal use only.
    */
-  @method async assertFinalized() {
+  async assertFinalized() {
     const currentSlot =
       this.network.globalSlotSinceGenesis.getAndRequireEquals();
     const finalizeSlot = this.finalizeSlot.getAndRequireEquals();
