@@ -15,10 +15,12 @@ import {
 
 import {
   checkIfSolved,
+  compressRewardAndFinalizeSlot,
   compressTurnCountMaxAttemptSolved,
   deserializeClue,
   getClueFromGuess,
   separateCombinationDigits,
+  separateRewardAndFinalizeSlot,
   separateTurnCountAndMaxAttemptSolved,
   serializeClue,
   validateCombination,
@@ -35,16 +37,7 @@ export class MastermindZkApp extends SmartContract {
   @state(Field) solutionHash = State<Field>();
   @state(Field) unseparatedGuess = State<Field>();
   @state(Field) serializedClue = State<Field>();
-  @state(UInt32) finalizeSlot = State<UInt32>();
-
-  /**
-   * @returns The balance of the contract.
-   */
-  async getContractBalance() {
-    const accountUpdate = AccountUpdate.create(this.address);
-    const tokenBalance = accountUpdate.account.balance.get(); // getAndReqEq ??
-    return tokenBalance;
-  }
+  @state(Field) rewardFinalizeSlot = State<Field>();
 
   /**
    * Asserts that the game has been finalized. For internal use only.
@@ -52,7 +45,8 @@ export class MastermindZkApp extends SmartContract {
   async assertFinalized() {
     const currentSlot =
       this.network.globalSlotSinceGenesis.getAndRequireEquals();
-    const finalizeSlot = this.finalizeSlot.getAndRequireEquals();
+    const rewardFinalizeSlot = this.rewardFinalizeSlot.getAndRequireEquals();
+    const { finalizeSlot } = separateRewardAndFinalizeSlot(rewardFinalizeSlot);
     currentSlot.assertGreaterThanOrEqual(
       finalizeSlot,
       'The game has not been finalized yet!'
@@ -161,6 +155,14 @@ export class MastermindZkApp extends SmartContract {
       this.sender.getAndRequireSignature()
     );
     codeMasterUpdate.send({ to: this.address, amount: rewardAmount });
+
+    const { finalizeSlot } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
+    );
+
+    this.rewardFinalizeSlot.set(
+      compressRewardAndFinalizeSlot(rewardAmount, finalizeSlot)
+    );
   }
 
   /**
@@ -187,7 +189,9 @@ export class MastermindZkApp extends SmartContract {
     const codeBreakerUpdate = AccountUpdate.createSigned(
       this.sender.getAndRequireSignature()
     );
-    const rewardAmount = await this.getContractBalance();
+    const { rewardAmount } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
+    );
     codeBreakerUpdate.send({ to: this.address, amount: rewardAmount });
 
     // generate codeBreaker ID
@@ -200,7 +204,10 @@ export class MastermindZkApp extends SmartContract {
     const currentSlot =
       this.network.globalSlotSinceGenesis.getAndRequireEquals();
     // Set the finalize slot to GAME_DURATION slots after the current slot (slot time is 3 minutes)
-    this.finalizeSlot.set(currentSlot.add(UInt32.from(GAME_DURATION)));
+    const finalizeSlot = currentSlot.add(UInt32.from(GAME_DURATION));
+    this.rewardFinalizeSlot.set(
+      compressRewardAndFinalizeSlot(rewardAmount, finalizeSlot)
+    );
   }
 
   /**
@@ -220,7 +227,9 @@ export class MastermindZkApp extends SmartContract {
 
     const currentSlot =
       this.network.globalSlotSinceGenesis.getAndRequireEquals();
-    const finalizeSlot = this.finalizeSlot.getAndRequireEquals();
+    const { finalizeSlot } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
+    );
     currentSlot.assertLessThan(
       finalizeSlot,
       'The game has already been finalized!'
@@ -311,8 +320,9 @@ export class MastermindZkApp extends SmartContract {
       .or(isCodeBreaker.and(isSolved.equals(1)));
     isWinner.assertTrue('You are not the winner of this game!');
 
-    const rewardAmount = await this.getContractBalance();
-
+    const { rewardAmount } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
+    );
     this.send({ to: claimer, amount: rewardAmount });
   }
 
@@ -342,7 +352,9 @@ export class MastermindZkApp extends SmartContract {
         'The code master ID is not same as the one stored on-chain!'
       );
 
-    const rewardAmount = await this.getContractBalance();
+    const { rewardAmount } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
+    );
     this.send({ to: codeMasterPubKey, amount: rewardAmount });
   }
 
@@ -372,7 +384,9 @@ export class MastermindZkApp extends SmartContract {
         'The code breaker ID is not same as the one stored on-chain!'
       );
 
-    const rewardAmount = await this.getContractBalance();
+    const { rewardAmount } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
+    );
     this.send({ to: codeBreakerPubKey, amount: rewardAmount });
   }
 
@@ -387,7 +401,9 @@ export class MastermindZkApp extends SmartContract {
 
     const currentSlot =
       this.network.globalSlotSinceGenesis.getAndRequireEquals();
-    const finalizeSlot = this.finalizeSlot.getAndRequireEquals();
+    const { finalizeSlot } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
+    );
     currentSlot.assertLessThan(
       finalizeSlot,
       'The game has already been finalized!'
@@ -468,7 +484,9 @@ export class MastermindZkApp extends SmartContract {
 
     const currentSlot =
       this.network.globalSlotSinceGenesis.getAndRequireEquals();
-    const finalizeSlot = this.finalizeSlot.getAndRequireEquals();
+    const { finalizeSlot } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
+    );
     currentSlot.assertLessThan(
       finalizeSlot,
       'The game has already been finalized!'

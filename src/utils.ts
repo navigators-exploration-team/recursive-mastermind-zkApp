@@ -1,4 +1,4 @@
-import { Field, Bool, Provable } from 'o1js';
+import { Field, Bool, Provable, UInt64, UInt32 } from 'o1js';
 
 export {
   separateCombinationDigits,
@@ -10,6 +10,8 @@ export {
   checkIfSolved,
   compressTurnCountMaxAttemptSolved,
   separateTurnCountAndMaxAttemptSolved,
+  compressRewardAndFinalizeSlot,
+  separateRewardAndFinalizeSlot,
 };
 
 /**
@@ -197,4 +199,31 @@ function separateTurnCountAndMaxAttemptSolved(value: Field) {
   compressTurnCountMaxAttemptSolved(digits).assertEquals(value);
 
   return digits;
+}
+
+function compressRewardAndFinalizeSlot(
+  rewardAmount: UInt64,
+  finalizeSlot: UInt32
+) {
+  return rewardAmount.value.mul(2 ** 32).add(finalizeSlot.value);
+}
+
+function separateRewardAndFinalizeSlot(value: Field) {
+  const digits = Provable.witness(Provable.Array(UInt32, 3), () => {
+    const num = value.toBigInt();
+    return [
+      UInt32.from(num / 18446744073709551616n),
+      UInt32.from((num / 4294967296n) % 4294967296n),
+      UInt32.from(num % 4294967296n),
+    ];
+  });
+
+  let rewardAmount = UInt64.from(digits[0])
+    .mul(2 ** 32)
+    .add(UInt64.from(digits[1]));
+  let finalizeSlot = digits[2];
+
+  compressRewardAndFinalizeSlot(rewardAmount, finalizeSlot).assertEquals(value);
+
+  return { rewardAmount, finalizeSlot };
 }
