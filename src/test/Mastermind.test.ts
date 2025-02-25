@@ -139,70 +139,32 @@ describe('Mastermind ZkApp Tests', () => {
     await submitGameProofTx.sign([codeBreakerKey]).send();
   }
 
-  async function claimcodeBreakerReward() {
-    const codeBreakerBalance = Mina.getBalance(codeBreakerPubKey);
-    const claimRewardTx = await Mina.transaction(
-      codeBreakerPubKey,
-      async () => {
-        await zkapp.claimCodeBreakerReward();
-      }
-    );
-
-    await claimRewardTx.prove();
-    await claimRewardTx.sign([codeBreakerKey]).send();
-
-    const contractBalance = Mina.getBalance(zkappAddress);
-    expect(Number(contractBalance.toBigInt())).toEqual(0);
-
-    const codeBreakerNewBalance = Mina.getBalance(codeBreakerPubKey);
-    expect(
-      Number(codeBreakerNewBalance.toBigInt() - codeBreakerBalance.toBigInt())
-    ).toEqual(2 * REWARD_AMOUNT);
-  }
-
-  async function testInvalidcodeBreakerClaimReward(
-    claimer: PublicKey,
-    claimerKey: PrivateKey,
-    expectedErrorMessage?: string
-  ) {
-    const claimRewardTx = async () => {
-      const tx = await Mina.transaction(claimer, async () => {
-        await zkapp.claimCodeBreakerReward();
-      });
-
-      await tx.prove();
-      await tx.sign([claimerKey]).send();
-    };
-
-    await expect(claimRewardTx()).rejects.toThrowError(expectedErrorMessage);
-  }
-
-  async function claimCodeMasterReward() {
-    const codeMasterBalance = Mina.getBalance(codeMasterPubKey);
-    const claimRewardTx = await Mina.transaction(codeMasterPubKey, async () => {
-      await zkapp.claimCodeMasterReward();
+  async function claimReward(claimer: PublicKey, claimerKey: PrivateKey) {
+    const claimerBalance = Mina.getBalance(claimer);
+    const claimRewardTx = await Mina.transaction(claimer, async () => {
+      await zkapp.claimReward();
     });
 
     await claimRewardTx.prove();
-    await claimRewardTx.sign([codeMasterKey]).send();
+    await claimRewardTx.sign([claimerKey]).send();
 
     const contractBalance = Mina.getBalance(zkappAddress);
     expect(Number(contractBalance.toBigInt())).toEqual(0);
 
-    const codeMasterNewBalance = Mina.getBalance(codeMasterPubKey);
+    const claimerNewBalance = Mina.getBalance(claimer);
     expect(
-      Number(codeMasterNewBalance.toBigInt() - codeMasterBalance.toBigInt())
+      Number(claimerNewBalance.toBigInt() - claimerBalance.toBigInt())
     ).toEqual(2 * REWARD_AMOUNT);
   }
 
-  async function testInvalidcodeMasterClaimReward(
+  async function testInvalidClaimReward(
     claimer: PublicKey,
     claimerKey: PrivateKey,
     expectedErrorMessage?: string
   ) {
     const claimRewardTx = async () => {
       const tx = await Mina.transaction(claimer, async () => {
-        await zkapp.claimCodeMasterReward();
+        await zkapp.claimReward();
       });
 
       await tx.prove();
@@ -463,7 +425,7 @@ describe('Mastermind ZkApp Tests', () => {
 
     it('Reject claiming reward before finalizing', async () => {
       const expectedErrorMessage = 'The game has not been finalized yet!';
-      await testInvalidcodeBreakerClaimReward(
+      await testInvalidClaimReward(
         codeBreakerPubKey,
         codeBreakerKey,
         expectedErrorMessage
@@ -692,7 +654,7 @@ describe('Mastermind ZkApp Tests', () => {
 
     it('Reject claiming reward before game finalized', async () => {
       const expectedErrorMessage = 'The game has not been finalized yet!';
-      await testInvalidcodeBreakerClaimReward(
+      await testInvalidClaimReward(
         codeBreakerPubKey,
         codeBreakerKey,
         expectedErrorMessage
@@ -708,8 +670,9 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Reject claiming reward from intruder', async () => {
-      const expectedErrorMessage = 'You are not the codeBreaker of this game!';
-      await testInvalidcodeBreakerClaimReward(
+      const expectedErrorMessage =
+        'You are not the codeMaster or codeBreaker of this game!';
+      await testInvalidClaimReward(
         intruderPubKey,
         intruderKey,
         expectedErrorMessage
@@ -717,8 +680,8 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Code Master claim rejected', async () => {
-      const expectedErrorMessage = 'The game has been solved!';
-      await testInvalidcodeMasterClaimReward(
+      const expectedErrorMessage = 'You are not the winner of this game!';
+      await testInvalidClaimReward(
         codeMasterPubKey,
         codeMasterKey,
         expectedErrorMessage
@@ -726,8 +689,9 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Intruder tries to claim reward', async () => {
-      const expectedErrorMessage = 'You are not the codeBreaker of this game!';
-      await testInvalidcodeBreakerClaimReward(
+      const expectedErrorMessage =
+        'You are not the codeMaster or codeBreaker of this game!';
+      await testInvalidClaimReward(
         intruderPubKey,
         intruderKey,
         expectedErrorMessage
@@ -735,7 +699,7 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Claim reward', async () => {
-      await claimcodeBreakerReward();
+      await claimReward(codeBreakerPubKey, codeBreakerKey);
     });
   });
 
@@ -994,7 +958,7 @@ describe('Mastermind ZkApp Tests', () => {
 
     it('Claim reward successfully', async () => {
       Local.incrementGlobalSlot(11);
-      await claimCodeMasterReward();
+      await claimReward(codeMasterPubKey, codeMasterKey);
     });
   });
 });

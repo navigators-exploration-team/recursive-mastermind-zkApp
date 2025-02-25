@@ -281,43 +281,13 @@ export class MastermindZkApp extends SmartContract {
   }
 
   /**
-   * Allows the codeBreaker to claim the reward if they have solved the game.
-   * @throws If the game has not been solved yet, or if the caller is not the codeBreaker.
+   * Allows the winner to claim the reward.
+   * @throws If the game has not been finalized yet, or if the caller is not the winner.
    */
-  @method async claimCodeBreakerReward() {
+  @method async claimReward() {
     let [, , isSolved] = separateTurnCountAndMaxAttemptSolved(
       this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
     );
-
-    isSolved.assertEquals(1, 'The game has not been solved yet!');
-
-    await this.assertFinalized();
-
-    const claimer = this.sender.getAndRequireSignature();
-
-    const codeBreakerId = this.codeBreakerId.getAndRequireEquals();
-    const computedCodebreakerId = Poseidon.hash(claimer.toFields());
-
-    codeBreakerId.assertEquals(
-      computedCodebreakerId,
-      'You are not the codeBreaker of this game!'
-    );
-
-    const rewardAmount = await this.getContractBalance();
-
-    this.send({ to: claimer, amount: rewardAmount });
-  }
-
-  /**
-   * Allows the codeMaster to claim the reward if the codeBreaker could not solve the game.
-   * @throws If the game has been solved, or if the caller is not the codeMaster.
-   */
-  @method async claimCodeMasterReward() {
-    let [, , isSolved] = separateTurnCountAndMaxAttemptSolved(
-      this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
-    );
-
-    isSolved.assertEquals(0, 'The game has been solved!');
 
     await this.assertFinalized();
 
@@ -326,10 +296,20 @@ export class MastermindZkApp extends SmartContract {
     const codeMasterId = this.codeMasterId.getAndRequireEquals();
     const computedCodeMasterId = Poseidon.hash(claimer.toFields());
 
-    codeMasterId.assertEquals(
-      computedCodeMasterId,
-      'You are not the codeMaster of this game!'
-    );
+    const codeBreakerId = this.codeBreakerId.getAndRequireEquals();
+    const computedCodebreakerId = Poseidon.hash(claimer.toFields());
+
+    const isCodeMaster = codeMasterId.equals(computedCodeMasterId);
+    const isCodeBreaker = codeBreakerId.equals(computedCodebreakerId);
+
+    isCodeMaster
+      .or(isCodeBreaker)
+      .assertTrue('You are not the codeMaster or codeBreaker of this game!');
+
+    const isWinner = isCodeMaster
+      .and(isSolved.equals(0))
+      .or(isCodeBreaker.and(isSolved.equals(1)));
+    isWinner.assertTrue('You are not the winner of this game!');
 
     const rewardAmount = await this.getContractBalance();
 
