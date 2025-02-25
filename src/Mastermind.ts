@@ -30,27 +30,76 @@ import { StepProgramProof } from './stepProgram.js';
 export const GAME_DURATION = 10; // 10 slots
 
 export class MastermindZkApp extends SmartContract {
+  /**
+   * `turnCountMaxAttemptsIsSolved` is a compressed state variable that
+   * stores the current turn count, maximum number of attempts allowed, and whether the game has been solved.
+   * Uses `compressTurnCountMaxAttemptSolved` to compress the state variable.
+   * The state variable is decompressed using `separateTurnCountAndMaxAttemptSolved`.
+   */
   @state(Field) turnCountMaxAttemptsIsSolved = State<Field>();
+
+  /**
+   * `codeMasterId` is the ID of the codeMaster `Hash(PubKey)` who created the game.
+   */
   @state(Field) codeMasterId = State<Field>();
+
+  /**
+   * `codeBreakerId` is the ID of the codeBreaker `Hash(PubKey)` who accepted the game.
+   */
   @state(Field) codeBreakerId = State<Field>();
+
+  /**
+   * `refereeId` is the ID of the referee `Hash(PubKey)` who penalizes misbehaving players.
+   */
   @state(Field) refereeId = State<Field>();
+
+  /**
+   * `solutionHash` is the hash of the secret combination and salt.
+   */
   @state(Field) solutionHash = State<Field>();
+
+  /**
+   * `unseparatedGuess` is the last guess made by the codeBreaker.
+   */
   @state(Field) unseparatedGuess = State<Field>();
+
+  /**
+   * `serializedClue` is the serialized clue given by the codeMaster to the codeBreaker.
+   */
   @state(Field) serializedClue = State<Field>();
+
+  /**
+   * `rewardFinalizeSlot` is a compressed state variable that stores the reward amount(`UInt64`) and the slot(`UInt32`) when the game is finalized.
+   * Uses `compressRewardAndFinalizeSlot` to compress the state variable.
+   * The state variable is decompressed using `separateRewardAndFinalizeSlot`.
+   */
   @state(Field) rewardFinalizeSlot = State<Field>();
 
   /**
    * Asserts that the game has been finalized. For internal use only.
    */
   async assertFinalized() {
-    const currentSlot =
-      this.network.globalSlotSinceGenesis.getAndRequireEquals();
-    const rewardFinalizeSlot = this.rewardFinalizeSlot.getAndRequireEquals();
-    const { finalizeSlot } = separateRewardAndFinalizeSlot(rewardFinalizeSlot);
-    currentSlot.assertGreaterThanOrEqual(
-      finalizeSlot,
-      'The game has not been finalized yet!'
+    const { finalizeSlot } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
     );
+    this.network.globalSlotSinceGenesis
+      .getAndRequireEquals()
+      .assertGreaterThanOrEqual(
+        finalizeSlot,
+        'The game has not been finalized yet!'
+      );
+  }
+
+  /**
+   * Asserts that the game is still ongoing. For internal use only.
+   */
+  async assertNotFinalized() {
+    const { finalizeSlot } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
+    );
+    this.network.globalSlotSinceGenesis
+      .getAndRequireEquals()
+      .assertLessThan(finalizeSlot, 'The game has already been finalized!');
   }
 
   async deploy() {
@@ -62,7 +111,6 @@ export class MastermindZkApp extends SmartContract {
         Permissions.VerificationKey.impossibleDuringCurrentVersion(),
       setPermissions: Permissions.impossible(),
       send: Permissions.proof(),
-      receive: Permissions.proof(),
     });
   }
 
@@ -151,17 +199,15 @@ export class MastermindZkApp extends SmartContract {
       ]);
     this.turnCountMaxAttemptsIsSolved.set(updatedTurnCountMaxAttemptsIsSolved);
 
+    // Get the reward amount from the codeMaster
     const codeMasterUpdate = AccountUpdate.createSigned(
       this.sender.getAndRequireSignature()
     );
     codeMasterUpdate.send({ to: this.address, amount: rewardAmount });
 
-    const { finalizeSlot } = separateRewardAndFinalizeSlot(
-      this.rewardFinalizeSlot.getAndRequireEquals()
-    );
-
+    // Update the on-chain reward amount
     this.rewardFinalizeSlot.set(
-      compressRewardAndFinalizeSlot(rewardAmount, finalizeSlot)
+      compressRewardAndFinalizeSlot(rewardAmount, UInt32.zero)
     );
   }
 
@@ -186,19 +232,21 @@ export class MastermindZkApp extends SmartContract {
 
     turnCount.assertEquals(1, 'The game has not been created yet!');
 
-    const codeBreakerUpdate = AccountUpdate.createSigned(
-      this.sender.getAndRequireSignature()
-    );
+    // Get the reward amount from the on-chain state
     const { rewardAmount } = separateRewardAndFinalizeSlot(
       this.rewardFinalizeSlot.getAndRequireEquals()
     );
+
+    // Transfer the reward amount to the contract from the codeBreaker
+    const codeBreakerUpdate = AccountUpdate.createSigned(
+      this.sender.getAndRequireSignature()
+    );
     codeBreakerUpdate.send({ to: this.address, amount: rewardAmount });
 
-    // generate codeBreaker ID
+    // generate codeBreaker ID and store on-chain
     const codeBreakerId = Poseidon.hash(
       this.sender.getAndRequireSignature().toFields()
     );
-
     this.codeBreakerId.set(codeBreakerId);
 
     const currentSlot =
@@ -206,7 +254,7 @@ export class MastermindZkApp extends SmartContract {
     // Set the finalize slot to GAME_DURATION slots after the current slot (slot time is 3 minutes)
     const finalizeSlot = currentSlot.add(UInt32.from(GAME_DURATION));
     this.rewardFinalizeSlot.set(
-      compressRewardAndFinalizeSlot(rewardAmount, finalizeSlot)
+      compressRewardAndFinalizeSlot(rewardAmount.mul(2), finalizeSlot)
     );
   }
 
@@ -225,15 +273,7 @@ export class MastermindZkApp extends SmartContract {
       'The game has not been accepted by the codeBreaker yet!'
     );
 
-    const currentSlot =
-      this.network.globalSlotSinceGenesis.getAndRequireEquals();
-    const { finalizeSlot } = separateRewardAndFinalizeSlot(
-      this.rewardFinalizeSlot.getAndRequireEquals()
-    );
-    currentSlot.assertLessThan(
-      finalizeSlot,
-      'The game has already been finalized!'
-    );
+    await this.assertNotFinalized();
 
     // Check if the game has been solved
     let [turnCount, maxAttempts, isSolved] =
@@ -399,15 +439,7 @@ export class MastermindZkApp extends SmartContract {
     const isInitialized = this.account.provedState.getAndRequireEquals();
     isInitialized.assertTrue('The game has not been initialized yet!');
 
-    const currentSlot =
-      this.network.globalSlotSinceGenesis.getAndRequireEquals();
-    const { finalizeSlot } = separateRewardAndFinalizeSlot(
-      this.rewardFinalizeSlot.getAndRequireEquals()
-    );
-    currentSlot.assertLessThan(
-      finalizeSlot,
-      'The game has already been finalized!'
-    );
+    await this.assertNotFinalized();
 
     const [turnCount, maxAttempts, isSolved] =
       separateTurnCountAndMaxAttemptSolved(
@@ -482,15 +514,7 @@ export class MastermindZkApp extends SmartContract {
     const isInitialized = this.account.provedState.getAndRequireEquals();
     isInitialized.assertTrue('The game has not been initialized yet!');
 
-    const currentSlot =
-      this.network.globalSlotSinceGenesis.getAndRequireEquals();
-    const { finalizeSlot } = separateRewardAndFinalizeSlot(
-      this.rewardFinalizeSlot.getAndRequireEquals()
-    );
-    currentSlot.assertLessThan(
-      finalizeSlot,
-      'The game has already been finalized!'
-    );
+    await this.assertNotFinalized();
 
     const [turnCount, maxAttempts, isSolved] =
       separateTurnCountAndMaxAttemptSolved(
