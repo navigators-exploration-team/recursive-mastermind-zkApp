@@ -7,7 +7,6 @@ import {
   PublicKey,
   AccountUpdate,
   Poseidon,
-  Signature,
   UInt64,
 } from 'o1js';
 
@@ -19,12 +18,13 @@ import {
   serializeClue,
 } from '../utils';
 
+import { StepProgram, StepProgramProof } from '../stepProgram';
+
 import {
-  PublicInputs,
-  PublicOutputs,
-  StepProgram,
-  StepProgramProof,
-} from '../stepProgram';
+  StepProgramCreateGame,
+  StepProgramGiveClue,
+  StepProgramMakeGuess,
+} from './testUtils';
 
 describe('Mastermind ZkApp Tests', () => {
   // Global variables
@@ -50,14 +50,13 @@ describe('Mastermind ZkApp Tests', () => {
 
   // Variables
   let codeMasterSalt: Field;
-  let unseparatedSecretCombination: Field;
+  let secretCombination: number[];
 
   // Proofs
   let partialProof: StepProgramProof;
   let completedProof: StepProgramProof;
-  let intruderProof: StepProgramProof;
+  // let intruderProof: StepProgramProof;
   let wrongProof: StepProgramProof;
-  let dummyProof: StepProgramProof;
 
   // Local Mina blockchain
   let Local: Awaited<ReturnType<typeof Mina.LocalBlockchain>>;
@@ -279,85 +278,34 @@ describe('Mastermind ZkApp Tests', () => {
 
     // Initialize codeMasterSalt & secret combination
     codeMasterSalt = Field.random();
-    unseparatedSecretCombination = Field.from(7163);
+    secretCombination = [7, 1, 6, 3];
 
     // Prepare brand-new MastermindZkApp for tests
     zkappPrivateKey = PrivateKey.random();
     zkappAddress = zkappPrivateKey.toPublicKey();
     zkapp = new MastermindZkApp(zkappAddress);
 
-    // dummyProof
-    dummyProof = await StepProgramProof.dummy(
-      new PublicInputs({
-        authPubKey: codeMasterPubKey,
-        authSignature: Signature.create(codeMasterKey, [
-          unseparatedSecretCombination,
-          codeMasterSalt,
-        ]),
-      }),
-      new PublicOutputs({
-        codeMasterId: Field.empty(),
-        codeBreakerId: Field.empty(),
-        solutionHash: Field.empty(),
-        lastGuess: Field.empty(),
-        serializedClue: Field.empty(),
-        turnCount: Field.empty(),
-      }),
-      2
+    // Base case: Create a new game
+    wrongProof = await StepProgramCreateGame(
+      secretCombination,
+      codeMasterSalt,
+      codeMasterKey
     );
 
-    // prepare wrongProof
-    // Base case: Create a new game
-    wrongProof = (
-      await StepProgram.createGame(
-        {
-          authPubKey: codeMasterPubKey,
-          authSignature: Signature.create(codeMasterKey, [
-            unseparatedSecretCombination,
-            codeMasterSalt,
-          ]),
-        },
-        unseparatedSecretCombination,
-        codeMasterSalt
-      )
-    ).proof;
-    const compressedAnswer = compressCombinationDigits([7, 1, 6, 3].map(Field));
-
     // Make a guess with wrong answer
-    wrongProof = (
-      await StepProgram.makeGuess(
-        {
-          authPubKey: codeBreakerPubKey,
-          authSignature: Signature.create(codeBreakerKey, [
-            compressedAnswer,
-            Field.from(
-              wrongProof ? wrongProof.publicOutput.turnCount.toBigInt() : 1
-            ),
-          ]),
-        },
-        wrongProof,
-        compressedAnswer
-      )
-    ).proof;
+    wrongProof = await StepProgramMakeGuess(
+      wrongProof,
+      secretCombination,
+      codeBreakerKey
+    );
 
     // Give clue with wrong answer
-    wrongProof = (
-      await StepProgram.giveClue(
-        {
-          authPubKey: codeMasterPubKey,
-          authSignature: Signature.create(codeMasterKey, [
-            compressedAnswer,
-            codeMasterSalt,
-            Field.from(
-              wrongProof ? wrongProof.publicOutput.turnCount.toBigInt() : 1
-            ),
-          ]),
-        },
-        wrongProof,
-        compressedAnswer,
-        codeMasterSalt
-      )
-    ).proof;
+    wrongProof = await StepProgramGiveClue(
+      wrongProof,
+      secretCombination,
+      codeMasterSalt,
+      codeMasterKey
+    );
   });
 
   describe('Deploy & Initialize Flow', () => {
@@ -533,114 +481,44 @@ describe('Mastermind ZkApp Tests', () => {
     beforeAll(async () => {
       // Build a "completedProof" that solves the game
       // This portion uses your StepProgram to create valid proofs off-chain.
-      unseparatedSecretCombination = Field.from(1234);
+      secretCombination = [1, 2, 3, 4];
 
       // 1. createGame
-      partialProof = (
-        await StepProgram.createGame(
-          {
-            authPubKey: codeMasterPubKey,
-            authSignature: Signature.create(codeMasterKey, [
-              unseparatedSecretCombination,
-              codeMasterSalt,
-            ]),
-          },
-          unseparatedSecretCombination,
-          codeMasterSalt
-        )
-      ).proof;
+      partialProof = await StepProgramCreateGame(
+        secretCombination,
+        codeMasterSalt,
+        codeMasterKey
+      );
 
       // 2. makeGuess
-      let unseparatedGuess = compressCombinationDigits([2, 1, 3, 4].map(Field));
-
-      partialProof = (
-        await StepProgram.makeGuess(
-          {
-            authPubKey: codeBreakerPubKey,
-            authSignature: Signature.create(codeBreakerKey, [
-              unseparatedGuess,
-              Field.from(
-                partialProof
-                  ? partialProof.publicOutput.turnCount.toBigInt()
-                  : 1
-              ),
-            ]),
-          },
-          partialProof,
-          unseparatedGuess
-        )
-      ).proof;
+      partialProof = await StepProgramMakeGuess(
+        partialProof,
+        [2, 1, 3, 4],
+        codeBreakerKey
+      );
 
       // 3. giveClue
-      let unseparatedCombination = compressCombinationDigits(
-        [1, 2, 3, 4].map(Field)
+      partialProof = await StepProgramGiveClue(
+        partialProof,
+        secretCombination,
+        codeMasterSalt,
+        codeMasterKey
       );
-
-      partialProof = (
-        await StepProgram.giveClue(
-          {
-            authPubKey: codeMasterPubKey,
-            authSignature: Signature.create(codeMasterKey, [
-              unseparatedCombination,
-              codeMasterSalt,
-              Field.from(
-                partialProof
-                  ? partialProof.publicOutput.turnCount.toBigInt()
-                  : 1
-              ),
-            ]),
-          },
-          partialProof,
-          unseparatedCombination,
-          codeMasterSalt
-        )
-      ).proof;
 
       // 4. second guess
-      unseparatedGuess = compressCombinationDigits([1, 2, 3, 4].map(Field));
-
-      completedProof = (
-        await StepProgram.makeGuess(
-          {
-            authPubKey: codeBreakerPubKey,
-            authSignature: Signature.create(codeBreakerKey, [
-              unseparatedGuess,
-              Field.from(
-                partialProof
-                  ? partialProof.publicOutput.turnCount.toBigInt()
-                  : 1
-              ),
-            ]),
-          },
-          partialProof,
-          unseparatedGuess
-        )
-      ).proof;
-
-      // 5. giveClue & final
-      unseparatedCombination = compressCombinationDigits(
-        [1, 2, 3, 4].map(Field)
+      completedProof = await StepProgramMakeGuess(
+        partialProof,
+        secretCombination,
+        codeBreakerKey
       );
 
-      completedProof = (
-        await StepProgram.giveClue(
-          {
-            authPubKey: codeMasterPubKey,
-            authSignature: Signature.create(codeMasterKey, [
-              unseparatedCombination,
-              codeMasterSalt,
-              Field.from(
-                completedProof
-                  ? completedProof.publicOutput.turnCount.toBigInt()
-                  : 1
-              ),
-            ]),
-          },
-          completedProof,
-          unseparatedCombination,
-          codeMasterSalt
-        )
-      ).proof;
+      // 5. giveClue & final
+      completedProof = await StepProgramGiveClue(
+        completedProof,
+        secretCombination,
+        codeMasterSalt,
+        codeMasterKey
+      );
     });
 
     it('Submit with correct game proof', async () => {
@@ -660,7 +538,7 @@ describe('Mastermind ZkApp Tests', () => {
       );
 
       expect(zkapp.unseparatedGuess.get()).toEqual(
-        compressCombinationDigits([1, 2, 3, 4].map(Field))
+        compressCombinationDigits(secretCombination.map(Field))
       );
 
       const serializedClue = zkapp.serializedClue.get();
