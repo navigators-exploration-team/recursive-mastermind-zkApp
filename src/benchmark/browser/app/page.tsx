@@ -8,7 +8,6 @@ interface BenchmarkResults {
   totalSeconds: number;
   deploySeconds: number;
   initializeGameSeconds: number;
-  createGameSeconds: number;
   acceptGameSeconds: number;
   baseGameSeconds: number;
   makeGuessSeconds: number[];
@@ -63,9 +62,6 @@ export default function Home() {
         appendFinalLog(`Deploy (Avg): ${result.deploySeconds.toFixed(3)}`);
         appendFinalLog(
           `Initialize Game (Avg): ${result.initializeGameSeconds.toFixed(3)}`
-        );
-        appendFinalLog(
-          `Create Game (Avg): ${result.createGameSeconds.toFixed(3)}`
         );
         appendFinalLog(
           `Accept Game (Avg): ${result.acceptGameSeconds.toFixed(3)}`
@@ -191,35 +187,27 @@ export default function Home() {
 
       async function initializeGame(
         zkapp: InstanceType<typeof MastermindZkApp>,
-        deployerKey: PrivateKey,
-        refereeKey: PrivateKey,
-        rounds: number
-      ): Promise<void> {
-        const deployerAccount = deployerKey.toPublicKey();
-        const refereeAccount = refereeKey.toPublicKey();
-        const initTx = await Mina.transaction(deployerAccount, async () => {
-          await zkapp.initGame(Field.from(rounds), refereeAccount);
-        });
-        await initTx.prove();
-        await initTx.sign([deployerKey]).send();
-      }
-
-      async function createGame(
-        zkapp: InstanceType<typeof MastermindZkApp>,
         codeMasterKey: PrivateKey,
         codeMasterSalt: Field,
-        secret: number
+        unseparatedSecretCombination: Field,
+        refereeKey: PrivateKey,
+        maxAttempt: Field
       ): Promise<void> {
-        const codeMasterPubKey = codeMasterKey.toPublicKey();
-        const tx = await Mina.transaction(codeMasterPubKey, async () => {
-          await zkapp.createGame(
-            Field(secret),
+        const deployerAccount = codeMasterKey.toPublicKey();
+        const refereeAccount = refereeKey.toPublicKey();
+
+        const initTx = await Mina.transaction(deployerAccount, async () => {
+          await zkapp.initGame(
+            unseparatedSecretCombination,
             codeMasterSalt,
+            maxAttempt,
+            refereeAccount,
             UInt64.from(10000)
           );
         });
-        await tx.prove();
-        await tx.sign([codeMasterKey]).send();
+
+        await initTx.prove();
+        await initTx.sign([codeMasterKey]).send();
       }
 
       async function acceptGame(
@@ -262,7 +250,6 @@ export default function Home() {
           totalSeconds: 0,
           deploySeconds: 0,
           initializeGameSeconds: 0,
-          createGameSeconds: 0,
           acceptGameSeconds: 0,
           baseGameSeconds: 0,
           makeGuessSeconds: [],
@@ -279,15 +266,16 @@ export default function Home() {
 
         updateProgress('Initializing game...');
         start = performance.now();
-        await initializeGame(zkapp, codeMasterKey, refereeKey, 15);
+        await initializeGame(
+          zkapp,
+          codeMasterKey,
+          codeMasterSalt,
+          unseparatedSecretCombination,
+          refereeKey,
+          Field.from(15)
+        );
         end = performance.now();
         currentBenchmarkResults.initializeGameSeconds = (end - start) / 1000;
-
-        updateProgress('Creating game...');
-        start = performance.now();
-        await createGame(zkapp, codeMasterKey, codeMasterSalt, secret);
-        end = performance.now();
-        currentBenchmarkResults.createGameSeconds = (end - start) / 1000;
 
         updateProgress('Accepting game...');
         start = performance.now();
@@ -379,7 +367,6 @@ export default function Home() {
         currentBenchmarkResults.totalSeconds =
           currentBenchmarkResults.deploySeconds +
           currentBenchmarkResults.initializeGameSeconds +
-          currentBenchmarkResults.createGameSeconds +
           currentBenchmarkResults.acceptGameSeconds +
           currentBenchmarkResults.baseGameSeconds +
           currentBenchmarkResults.makeGuessSeconds.reduce((a, b) => a + b, 0) +
