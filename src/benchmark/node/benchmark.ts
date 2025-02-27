@@ -12,23 +12,9 @@ import { StepProgram, StepProgramProof } from '../../stepProgram.js';
 import { performance } from 'perf_hooks';
 import { checkIfSolved, deserializeClue } from '../../utils.js';
 
-async function localDeploy(
+async function deployAndInitializeGame(
   zkapp: MastermindZkApp,
-  deployerKey: PrivateKey,
-  zkappPrivateKey: PrivateKey
-) {
-  const deployerAccount = deployerKey.toPublicKey();
-  const tx = await Mina.transaction(deployerAccount, async () => {
-    AccountUpdate.fundNewAccount(deployerAccount);
-    zkapp.deploy();
-  });
-
-  await tx.prove();
-  await tx.sign([deployerKey, zkappPrivateKey]).send();
-}
-
-async function initializeGame(
-  zkapp: MastermindZkApp,
+  zkappPrivateKey: PrivateKey,
   codeMasterKey: PrivateKey,
   codeMasterSalt: Field,
   unseparatedSecretCombination: Field,
@@ -39,6 +25,8 @@ async function initializeGame(
   const refereeAccount = refereeKey.toPublicKey();
 
   const initTx = await Mina.transaction(deployerAccount, async () => {
+    AccountUpdate.fundNewAccount(deployerAccount);
+    zkapp.deploy();
     await zkapp.initGame(
       unseparatedSecretCombination,
       codeMasterSalt,
@@ -49,7 +37,7 @@ async function initializeGame(
   });
 
   await initTx.prove();
-  await initTx.sign([codeMasterKey]).send();
+  await initTx.sign([codeMasterKey, zkappPrivateKey]).send();
 }
 
 async function acceptGame(zkapp: MastermindZkApp, codeBreakerKey: PrivateKey) {
@@ -92,11 +80,11 @@ function prettifyBenchmarks(result: BenchmarkResults) {
   console.table([
     { Metric: 'Step Length', Value: result.stepLength },
     { Metric: 'Total Seconds', Value: result.totalSeconds.toFixed(3) },
-    { Metric: 'Deploy (Avg)', Value: result.deploySeconds.toFixed(3) },
     {
-      Metric: 'Initialize Game (Avg)',
-      Value: result.initializeGameSeconds.toFixed(3),
+      Metric: 'Deploy & Initialize (Avg)',
+      Value: result.deployAndInitializeSeconds.toFixed(3),
     },
+
     { Metric: 'Accept Game (Avg)', Value: result.acceptGameSeconds.toFixed(3) },
     { Metric: 'Base Game Proof Create (Avg)', Value: avgCreateGame.toFixed(3) },
     { Metric: 'Make Guess (Avg)', Value: avgMakeGuess.toFixed(3) },
@@ -121,11 +109,7 @@ function overallScores(benchmarkResults: BenchmarkResults[]) {
     0
   );
   const totalDeploy = benchmarkResults.reduce(
-    (sum, result) => sum + result.deploySeconds,
-    0
-  );
-  const totalInitializeGame = benchmarkResults.reduce(
-    (sum, result) => sum + result.initializeGameSeconds,
+    (sum, result) => sum + result.deployAndInitializeSeconds,
     0
   );
   const totalAcceptGame = benchmarkResults.reduce(
@@ -156,12 +140,8 @@ function overallScores(benchmarkResults: BenchmarkResults[]) {
       Value: totalTime / totalStepLength,
     },
     {
-      Metric: 'Avg Deploy Time',
+      Metric: 'Avg Deploy & Initialize Time',
       Value: totalDeploy / totalBenchmarkResults,
-    },
-    {
-      Metric: 'Avg Initialize Game Time',
-      Value: totalInitializeGame / totalBenchmarkResults,
     },
     {
       Metric: 'Avg Create Game Time',
@@ -193,8 +173,7 @@ function overallScores(benchmarkResults: BenchmarkResults[]) {
 interface BenchmarkResults {
   stepLength: number;
   totalSeconds: number;
-  deploySeconds: number;
-  initializeGameSeconds: number;
+  deployAndInitializeSeconds: number;
   acceptGameSeconds: number;
   baseGameSeconds: number;
   makeGuessSeconds: number[];
@@ -289,8 +268,7 @@ async function solveBenchmark(secret: number, steps: Field[]) {
   let currentBenchmarkResults: BenchmarkResults = {
     stepLength: steps.length,
     totalSeconds: 0,
-    deploySeconds: 0,
-    initializeGameSeconds: 0,
+    deployAndInitializeSeconds: 0,
     acceptGameSeconds: 0,
     baseGameSeconds: 0,
     makeGuessSeconds: [],
@@ -300,21 +278,18 @@ async function solveBenchmark(secret: number, steps: Field[]) {
   };
 
   let start = performance.now();
-  await localDeploy(zkapp, codeMasterKey, zkappPrivateKey);
-  let end = performance.now();
-  currentBenchmarkResults.deploySeconds = (end - start) / 1000;
-
-  start = performance.now();
-  await initializeGame(
+  await deployAndInitializeGame(
     zkapp,
+    zkappPrivateKey,
     codeMasterKey,
     codeMasterSalt,
     unseparatedSecretCombination,
     refereeKey,
     Field.from(15)
   );
-  end = performance.now();
-  currentBenchmarkResults.initializeGameSeconds = (end - start) / 1000;
+  let end = performance.now();
+
+  currentBenchmarkResults.deployAndInitializeSeconds = (end - start) / 1000;
 
   start = performance.now();
   await acceptGame(zkapp, codeBreakerKey);
@@ -399,8 +374,7 @@ async function solveBenchmark(secret: number, steps: Field[]) {
   currentBenchmarkResults.submitGameProofSeconds = (end - start) / 1000;
 
   currentBenchmarkResults.totalSeconds =
-    currentBenchmarkResults.deploySeconds +
-    currentBenchmarkResults.initializeGameSeconds +
+    currentBenchmarkResults.deployAndInitializeSeconds +
     currentBenchmarkResults.acceptGameSeconds +
     currentBenchmarkResults.baseGameSeconds +
     currentBenchmarkResults.makeGuessSeconds.reduce((a, b) => a + b, 0) +
