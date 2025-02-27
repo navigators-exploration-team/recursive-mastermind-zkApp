@@ -144,10 +144,6 @@ function overallScores(benchmarkResults: BenchmarkResults[]) {
       Value: totalDeploy / totalBenchmarkResults,
     },
     {
-      Metric: 'Avg Create Game Time',
-      Value: totalCreateGame / totalBenchmarkResults,
-    },
-    {
       Metric: 'Avg Accept Game Time',
       Value: totalAcceptGame / totalBenchmarkResults,
     },
