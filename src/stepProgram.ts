@@ -10,20 +10,37 @@ import {
 
 import {
   checkIfSolved,
-  deserializeClue,
-  getClueFromGuess,
-  separateCombinationDigits,
   serializeClue,
+  deserializeClue,
+  deserializeClueHistory,
+  deserializeCombinationHistory,
+  getClueFromGuess,
+  getElementAtIndex,
+  separateCombinationDigits,
+  serializeClueHistory,
+  serializeCombinationHistory,
+  updateElementAtIndex,
   validateCombination,
 } from './utils.js';
 
 export { StepProgram, PublicInputs, PublicOutputs, StepProgramProof };
 
+/**
+ * authPubKey and authSignature is used for the authenticity of the data transferred. It enables a p2p authenticated communication.
+ */
 class PublicInputs extends Struct({
   authPubKey: PublicKey,
   authSignature: Signature,
 }) {}
 
+/**
+ * @param `codeMasterId` and `codeBreakerId` should be same with the on-chain values of players.
+ * @param `solutionHash` should also be same with the one on-chain value.
+ * @param `lastGuess` and `serializedClue` are the values obtained from the `makeGuess` and `giveClue` methods, respectively.
+ * @param `turnCount` is the turn count of the game. Even turn counts represent the turns of code master and odd turn counts represent the turn of the code breaker.
+ * @param `packedGuessHistory` is a serialized data that keeps all guesses done so far.
+ * @param `packedClueHistory` is a serialized data that keeps all clues given so far.
+ */
 class PublicOutputs extends Struct({
   codeMasterId: Field,
   codeBreakerId: Field,
@@ -31,6 +48,8 @@ class PublicOutputs extends Struct({
   lastGuess: Field,
   serializedClue: Field,
   turnCount: Field,
+  packedGuessHistory: Field,
+  packedClueHistory: Field,
 }) {}
 
 const StepProgram = ZkProgram({
@@ -77,6 +96,8 @@ const StepProgram = ZkProgram({
             lastGuess: Field.empty(),
             serializedClue: Field.empty(),
             turnCount: Field.from(1),
+            packedGuessHistory: Field.from(0),
+            packedClueHistory: Field.from(0),
           }),
         };
       },
@@ -138,12 +159,28 @@ const StepProgram = ZkProgram({
         const guessDigits = separateCombinationDigits(unseparatedGuess);
         validateCombination(guessDigits);
 
+        const serializedGuessHistory =
+          previousClue.publicOutput.packedGuessHistory;
+
+        const guessHistory = deserializeCombinationHistory(
+          serializedGuessHistory
+        );
+        const updatedGuessHistory = updateElementAtIndex(
+          unseparatedGuess,
+          guessHistory,
+          turnCount.sub(1).div(2)
+        );
+
+        const serializedUpdatedGuessHistory =
+          serializeCombinationHistory(updatedGuessHistory);
+
         return {
           publicOutput: new PublicOutputs({
             ...previousClue.publicOutput,
             codeBreakerId: computedCodebreakerId,
             lastGuess: unseparatedGuess,
             turnCount: turnCount.add(1),
+            packedGuessHistory: serializedUpdatedGuessHistory,
           }),
         };
       },
@@ -214,6 +251,21 @@ const StepProgram = ZkProgram({
 
         // get & separate the latest guess
         const unseparatedGuess = previousGuess.publicOutput.lastGuess;
+
+        const serializedGuessHistory =
+          previousGuess.publicOutput.packedGuessHistory;
+        const guessHistory = deserializeCombinationHistory(
+          serializedGuessHistory
+        );
+
+        const guessIndex = turnCount.div(2).sub(1);
+        const latestGuess = getElementAtIndex(guessHistory, guessIndex);
+
+        latestGuess.assertEquals(
+          previousGuess.publicOutput.lastGuess,
+          'Latest guesss in history does not match with last guess in proof!'
+        );
+
         const guessDigits = separateCombinationDigits(unseparatedGuess);
 
         // Scan the guess through the solution and return clue result(hit or blow)
@@ -221,12 +273,24 @@ const StepProgram = ZkProgram({
 
         // Serialize & give the clue
         const serializedClue = serializeClue(clue);
+        const serializedClueHistory =
+          previousGuess.publicOutput.packedClueHistory;
+        const clueHistory = deserializeClueHistory(serializedClueHistory);
+        const updatedClueHistory = updateElementAtIndex(
+          serializedClue,
+          clueHistory,
+          guessIndex
+        );
+
+        const serializedUpdatedClueHistory =
+          serializeClueHistory(updatedClueHistory);
 
         return {
           publicOutput: new PublicOutputs({
             ...previousGuess.publicOutput,
             serializedClue,
             turnCount: turnCount.add(1),
+            packedClueHistory: serializedUpdatedClueHistory,
           }),
         };
       },

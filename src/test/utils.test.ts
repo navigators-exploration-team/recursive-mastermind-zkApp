@@ -3,8 +3,32 @@ import {
   getClueFromGuess,
   separateCombinationDigits,
   validateCombination,
+  updateElementAtIndex,
+  getElementAtIndex,
+  deserializeClue,
+  serializeClue,
+  serializeCombinationHistory,
+  deserializeCombinationHistory,
+  serializeClueHistory,
+  deserializeClueHistory,
 } from '../utils';
+
 import { Field } from 'o1js';
+
+/*
+ * Random combination generator function for utility function tests.
+ *
+ */
+function generateRandomCombinations(length: number): Field[] {
+  const randomNumbers: number[] = [];
+
+  for (let i = 0; i < length; i++) {
+    const randomFourDigitNumber = Math.floor(1000 + Math.random() * 9000);
+    randomNumbers.push(randomFourDigitNumber);
+  }
+
+  return randomNumbers.map(Field);
+}
 
 describe('Provable utilities - unit tests', () => {
   describe('Tests for separateCombinationDigits function', () => {
@@ -219,6 +243,145 @@ describe('Provable utilities - unit tests', () => {
       expect(compressTurnCountMaxAttemptSolved(expectedDigits)).toEqual(
         compressedValue
       );
+    });
+  });
+
+  describe('Tests for packing/unpacking multiple fields', () => {
+    describe('combination history', () => {
+      it('should correctly pack and unpack a combination history of 4 updated elements', () => {
+        const inputs = generateRandomCombinations(4);
+        const packed = serializeCombinationHistory(inputs);
+        const unpacked = deserializeCombinationHistory(packed);
+
+        expect(unpacked.slice(0, inputs.length)).toEqual(inputs);
+      });
+
+      it('should correctly pack and unpack a combination history of 15 elements', () => {
+        const inputs = generateRandomCombinations(15);
+        const packed = serializeCombinationHistory(inputs);
+        const unpacked = deserializeCombinationHistory(packed);
+
+        expect(unpacked.slice(0, inputs.length)).toEqual(inputs);
+      });
+
+      it('should throw an error when attempting to pack more than 15 elements in combination history', () => {
+        const shouldReject = () => {
+          const inputs = generateRandomCombinations(16);
+          const packed = serializeCombinationHistory(inputs);
+          deserializeCombinationHistory(packed);
+        };
+        expect(shouldReject).toThrow();
+      });
+    });
+
+    describe('clue history tests', () => {
+      it('should correctly pack and unpack a clue history of 3 updated elements', () => {
+        const clues = [
+          [2, 0, 0, 1],
+          [1, 2, 0, 0],
+          [2, 2, 2, 2],
+        ].map((c) => c.map(Field));
+
+        const serializedClues = clues.map(serializeClue);
+        const packedSerializedClues = serializeClueHistory(serializedClues);
+        const unpackedSerializedClues = deserializeClueHistory(
+          packedSerializedClues
+        );
+        const unpackedDeserializedClues =
+          unpackedSerializedClues.map(deserializeClue);
+
+        expect(unpackedDeserializedClues.slice(0, clues.length)).toEqual(clues);
+      });
+
+      it('should correctly pack and unpack a clue history of 15 elements', () => {
+        const clues = Array.from({ length: 15 }, () => [1, 2, 1, 0].map(Field));
+        const serializedClues = clues.map(serializeClue);
+        const packedSerializedClues = serializeClueHistory(serializedClues);
+        const unpackedSerializedClues = deserializeClueHistory(
+          packedSerializedClues
+        );
+        const unpackedDeserializedClues =
+          unpackedSerializedClues.map(deserializeClue);
+
+        expect(unpackedDeserializedClues.slice(0, clues.length)).toEqual(clues);
+      });
+
+      it('should throw an error when attempting to pack more than 15 elements in clue history', () => {
+        const shouldReject = () => {
+          const clues = Array.from({ length: 16 }, () =>
+            [1, 2, 1, 0].map(Field)
+          );
+          const serializedClues = clues.map(serializeClue);
+          const packedSerializedClues = serializeClueHistory(serializedClues);
+          deserializeClueHistory(packedSerializedClues);
+        };
+        expect(shouldReject).toThrow();
+      });
+    });
+  });
+
+  describe('Tests for dynamic indexing & updating of field arrays', () => {
+    describe('getElementAtIndex', () => {
+      it('should return the same elements as JS array indexing', () => {
+        const fieldArray = generateRandomCombinations(10);
+        for (let i = 0; i < fieldArray.length; i++) {
+          expect(getElementAtIndex(fieldArray, Field(i))).toEqual(
+            fieldArray[i]
+          );
+        }
+      });
+
+      it('should throw an error for out-of-bounds index', () => {
+        const fieldArray = generateRandomCombinations(15);
+        const shouldReject = () => {
+          const outOfBoundIndex = Field(16);
+          getElementAtIndex(fieldArray, outOfBoundIndex);
+        };
+
+        expect(shouldReject).toThrow(
+          'Invalid index: Index out of bounds or multiple indices match!'
+        );
+      });
+    });
+
+    describe('updateElementAtIndex', () => {
+      it('should correctly update an element at the specified index', () => {
+        const fieldArray = generateRandomCombinations(10);
+        const newValue = Field(9999);
+        const indexToUpdate = Field(4); // Choose an index to update
+
+        const updatedArray = updateElementAtIndex(
+          newValue,
+          fieldArray,
+          indexToUpdate
+        );
+
+        // Ensure the updated index has the new value
+        expect(getElementAtIndex(updatedArray, indexToUpdate)).toEqual(
+          newValue
+        );
+
+        // Ensure other elements remain unchanged
+        for (let i = 0; i < fieldArray.length; i++) {
+          if (i !== 4) {
+            expect(getElementAtIndex(updatedArray, Field(i))).toEqual(
+              fieldArray[i]
+            );
+          }
+        }
+      });
+
+      it('should throw an error for out-of-bounds index during update', () => {
+        const fieldArray = generateRandomCombinations(10);
+        const newValue = Field(9999);
+        const outOfBoundIndex = Field(12); // Out of bounds for an array of length 10
+
+        const shouldReject = () => {
+          updateElementAtIndex(newValue, fieldArray, outOfBoundIndex);
+        };
+
+        expect(shouldReject).toThrow('Invalid index: Index out of bounds!');
+      });
     });
   });
 });
