@@ -147,7 +147,7 @@ describe('Mastermind ZkProgram Tests', () => {
       );
 
       const publicOutputs = stepProof.proof.publicOutput;
-      
+
       expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
       expect(publicOutputs.codeBreakerId).toEqual(Field.empty());
       expect(publicOutputs.solutionHash).toEqual(
@@ -185,8 +185,8 @@ describe('Mastermind ZkProgram Tests', () => {
 
     it('codeBreaker should make a guess successfully', async () => {
       const firstGuess = [1, 5, 6, 2];
-      const unseparatedGuess = compressCombinationDigits(firstGuess.map(Field)); 
-      
+      const unseparatedGuess = compressCombinationDigits(firstGuess.map(Field));
+
       const stepProof = await StepProgram.makeGuess(
         {
           authPubKey: codeBreakerPubKey,
@@ -202,7 +202,9 @@ describe('Mastermind ZkProgram Tests', () => {
       );
 
       const publicOutputs = stepProof.proof.publicOutput;
-      const deserializedGuess = deserializeCombinationHistory(publicOutputs.packedGuessHistory)[0];
+      const deserializedGuess = deserializeCombinationHistory(
+        publicOutputs.packedGuessHistory
+      )[0];
 
       expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
       expect(publicOutputs.codeBreakerId).toEqual(codeBreakerId);
@@ -216,7 +218,6 @@ describe('Mastermind ZkProgram Tests', () => {
       expect(deserializedGuess).toEqual(unseparatedGuess);
       lastProof = stepProof.proof;
     });
-
 
     it('should reject makeGuess in the wrong turn', async () => {
       const expectedErrorMessage =
@@ -273,7 +274,9 @@ describe('Mastermind ZkProgram Tests', () => {
       );
 
       const publicOutputs = stepProof.proof.publicOutput;
-      const deserializedClue = deserializeClueHistory(publicOutputs.packedClueHistory)[0];
+      const deserializedClue = deserializeClueHistory(
+        publicOutputs.packedClueHistory
+      )[0];
 
       expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
       expect(publicOutputs.codeBreakerId).toEqual(codeBreakerId);
@@ -288,11 +291,8 @@ describe('Mastermind ZkProgram Tests', () => {
       expect(publicOutputs.turnCount.toBigInt()).toEqual(3n);
       expect(publicOutputs.packedClueHistory).toEqual(deserializedClue);
 
-
       lastProof = stepProof.proof;
     });
-
-
 
     it('should reject the codeMaster from calling this method out of sequence', async () => {
       const expectedErrorMessage =
@@ -331,13 +331,15 @@ describe('Mastermind ZkProgram Tests', () => {
       );
 
       const publicOutputs = stepProof.proof.publicOutput;
-      const [firstData,secondData] = deserializeCombinationHistory(publicOutputs.packedGuessHistory);
+      const [firstData, secondData] = deserializeCombinationHistory(
+        publicOutputs.packedGuessHistory
+      );
 
       expect(publicOutputs.lastGuess).toEqual(unseparatedGuess);
       expect(publicOutputs.turnCount.toBigInt()).toEqual(4n);
       expect(firstData).toEqual(Field.from(1562));
       expect(secondData).toEqual(unseparatedGuess);
-      
+
       lastProof = stepProof.proof;
     });
 
@@ -435,7 +437,9 @@ describe('Mastermind ZkProgram Tests', () => {
       );
 
       const publicOutputs = stepProof.proof.publicOutput;
-      const deserializedClue = deserializeClueHistory(publicOutputs.packedClueHistory)[0];
+      const deserializedClue = deserializeClueHistory(
+        publicOutputs.packedClueHistory
+      )[0];
       const clue = deserializeClue(deserializedClue);
 
       expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
@@ -448,7 +452,7 @@ describe('Mastermind ZkProgram Tests', () => {
         serializeClue([2, 2, 2, 2].map(Field))
       );
       expect(publicOutputs.turnCount.toBigInt()).toEqual(3n);
-      expect(clue).toEqual([2,2,2,2].map(Field));
+      expect(clue).toEqual([2, 2, 2, 2].map(Field));
 
       lastProof = stepProof.proof;
     });
@@ -519,7 +523,7 @@ describe('Mastermind ZkProgram Tests', () => {
       );
 
       const publicOutputs = stepProof.proof.publicOutput;
-      
+
       expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
       expect(publicOutputs.codeBreakerId).toEqual(codeBreakerId);
       expect(publicOutputs.solutionHash).toEqual(
@@ -554,8 +558,10 @@ describe('Mastermind ZkProgram Tests', () => {
       );
 
       const publicOutputs = stepProof.proof.publicOutput;
-      
-      const deserializedClue = deserializeClueHistory(publicOutputs.packedClueHistory)[0];
+
+      const deserializedClue = deserializeClueHistory(
+        publicOutputs.packedClueHistory
+      )[0];
 
       const clue = deserializeClue(deserializedClue);
 
@@ -569,7 +575,7 @@ describe('Mastermind ZkProgram Tests', () => {
         serializeClue([1, 1, 1, 1].map(Field))
       );
       expect(publicOutputs.turnCount.toBigInt()).toEqual(3n);
-      expect(clue).toEqual([1,1,1,1].map(Field));
+      expect(clue).toEqual([1, 1, 1, 1].map(Field));
       expect(deserializedClue.toBigInt()).toEqual(85n); // it is stored as [01010101], which is 85.
 
       lastProof = stepProof.proof;

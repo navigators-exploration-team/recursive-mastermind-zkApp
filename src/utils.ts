@@ -15,7 +15,7 @@ export {
   serializeCombinationHistory,
   deserializeCombinationHistory,
   updateElementAtIndex,
-  getElementAtIndex
+  getElementAtIndex,
 };
 
 /**
@@ -338,7 +338,7 @@ function serialize(fields: Field[], range: number): Field {
 function deserialize(
   serializedField: Field,
   size: number,
-  chunkSize: number 
+  chunkSize: number
 ): Field[] {
   const packedBits = serializedField.toBits(size);
   const unpackedBits: Bool[][] = [];

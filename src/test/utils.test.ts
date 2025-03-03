@@ -10,15 +10,15 @@ import {
   serializeCombinationHistory,
   deserializeCombinationHistory,
   serializeClueHistory,
-  deserializeClueHistory
+  deserializeClueHistory,
 } from '../utils';
 
 import { Field } from 'o1js';
 
 /*
-* Random combination generator function for utility function tests.
-* 
-*/
+ * Random combination generator function for utility function tests.
+ *
+ */
 function generateRandomCombinations(length: number): Field[] {
   const randomNumbers: number[] = [];
 
@@ -29,7 +29,6 @@ function generateRandomCombinations(length: number): Field[] {
 
   return randomNumbers.map(Field);
 }
-
 
 describe('Provable utilities - unit tests', () => {
   describe('Tests for separateCombinationDigits function', () => {
@@ -321,8 +320,6 @@ describe('Provable utilities - unit tests', () => {
     });
   });
 
-
-
   describe('Tests for dynamic indexing & updating of field arrays', () => {
     describe('getElementAtIndex', () => {
       it('should return the same elements as JS array indexing', () => {
@@ -387,6 +384,4 @@ describe('Provable utilities - unit tests', () => {
       });
     });
   });
-
-
 });
