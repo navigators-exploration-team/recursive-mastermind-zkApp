@@ -207,6 +207,12 @@ function separateTurnCountAndMaxAttemptSolved(value: Field) {
   return digits;
 }
 
+/**
+ * Combines the reward amount and finalize slot into a single Field value.
+ * @param rewardAmount - The amount of reward in `UInt64`.
+ * @param finalizeSlot - The slot at which the game will finalize in `UInt32`.
+ * @returns - The combined Field element representing the compressed reward amount and finalize slot.
+ */
 function compressRewardAndFinalizeSlot(
   rewardAmount: UInt64,
   finalizeSlot: UInt32
@@ -214,6 +220,12 @@ function compressRewardAndFinalizeSlot(
   return rewardAmount.value.mul(2 ** 32).add(finalizeSlot.value);
 }
 
+/**
+ * Separates the reward amount and finalize slot from a single Field value.
+ *
+ * @param value - The Field value to be separated into reward amount and finalize slot.
+ * @returns - An object containing the separated reward amount and finalize slot.
+ */
 function separateRewardAndFinalizeSlot(value: Field) {
   const digits = Provable.witness(Provable.Array(UInt32, 3), () => {
     const num = value.toBigInt();
