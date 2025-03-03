@@ -167,16 +167,14 @@ export class MastermindZkApp extends SmartContract {
     const solutionHash = Poseidon.hash([...secretCombination, salt]);
     this.solutionHash.set(solutionHash);
 
+    const sender = this.sender.getUnconstrained();
+
     // Generate codeMaster ID & store on-chain
-    const codeMasterId = Poseidon.hash(
-      this.sender.getAndRequireSignature().toFields()
-    );
+    const codeMasterId = Poseidon.hash(sender.toFields());
     this.codeMasterId.set(codeMasterId);
 
     // Get the reward amount from the codeMaster
-    const codeMasterUpdate = AccountUpdate.createSigned(
-      this.sender.getAndRequireSignature()
-    );
+    const codeMasterUpdate = AccountUpdate.createSigned(sender);
     codeMasterUpdate.send({ to: this.address, amount: rewardAmount });
 
     // Update the on-chain reward amount
@@ -211,16 +209,14 @@ export class MastermindZkApp extends SmartContract {
       this.rewardFinalizeSlot.getAndRequireEquals()
     );
 
+    const sender = this.sender.getUnconstrained();
+
     // Transfer the reward amount to the contract from the codeBreaker
-    const codeBreakerUpdate = AccountUpdate.createSigned(
-      this.sender.getAndRequireSignature()
-    );
+    const codeBreakerUpdate = AccountUpdate.createSigned(sender);
     codeBreakerUpdate.send({ to: this.address, amount: rewardAmount });
 
     // generate codeBreaker ID and store on-chain
-    const codeBreakerId = Poseidon.hash(
-      this.sender.getAndRequireSignature().toFields()
-    );
+    const codeBreakerId = Poseidon.hash(sender.toFields());
     this.codeBreakerId.set(codeBreakerId);
 
     const currentSlot =
