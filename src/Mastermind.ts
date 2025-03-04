@@ -76,30 +76,25 @@ export class MastermindZkApp extends SmartContract {
   @state(Field) rewardFinalizeSlot = State<Field>();
 
   /**
-   * Asserts that the game has been finalized. For internal use only.
+   * Checks if the game has been finalized.
+   * @returns `true` if the game has been finalized, `false` otherwise.
    */
-  async assertFinalized() {
+  async isFinalized() {
     const { finalizeSlot } = separateRewardAndFinalizeSlot(
       this.rewardFinalizeSlot.getAndRequireEquals()
     );
-    this.network.globalSlotSinceGenesis
+    return this.network.globalSlotSinceGenesis
       .getAndRequireEquals()
-      .assertGreaterThanOrEqual(
-        finalizeSlot,
-        'The game has not been finalized yet!'
-      );
+      .greaterThanOrEqual(finalizeSlot);
   }
 
   /**
    * Asserts that the game is still ongoing. For internal use only.
    */
   async assertNotFinalized() {
-    const { finalizeSlot } = separateRewardAndFinalizeSlot(
-      this.rewardFinalizeSlot.getAndRequireEquals()
+    (await this.isFinalized()).assertFalse(
+      'The game has already been finalized!'
     );
-    this.network.globalSlotSinceGenesis
-      .getAndRequireEquals()
-      .assertLessThan(finalizeSlot, 'The game has already been finalized!');
   }
 
   async deploy() {
@@ -307,11 +302,12 @@ export class MastermindZkApp extends SmartContract {
    * @throws If the game has not been finalized yet, or if the caller is not the winner.
    */
   @method async claimReward() {
-    let [, , isSolved] = separateTurnCountAndMaxAttemptSolved(
-      this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
-    );
+    let [turnCount, maxAttempts, isSolved] =
+      separateTurnCountAndMaxAttemptSolved(
+        this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
+      );
 
-    await this.assertFinalized();
+    const isFinalized = await this.isFinalized();
 
     const claimer = this.sender.getAndRequireSignature();
 
@@ -324,13 +320,24 @@ export class MastermindZkApp extends SmartContract {
     const isCodeMaster = codeMasterId.equals(computedCodeMasterId);
     const isCodeBreaker = codeBreakerId.equals(computedCodebreakerId);
 
+    // Code Master wins if the game is finalized and the codeBreaker has not solved the secret combination yet
+    const codeMasterWinByFinalize = isSolved.equals(0).and(isFinalized);
+    // Code Master wins if the codeBreaker has reached the maximum number of attempts without solving the secret combination
+    const codeMasterWinByMaxAttempts = isSolved
+      .equals(0)
+      .and(turnCount.equals(maxAttempts.mul(2)));
+
+    // Code Breaker wins if the game is solved
+    const codeBreakerWin = isSolved.equals(1);
+
     isCodeMaster
       .or(isCodeBreaker)
       .assertTrue('You are not the codeMaster or codeBreaker of this game!');
 
     const isWinner = isCodeMaster
-      .and(isSolved.equals(0))
-      .or(isCodeBreaker.and(isSolved.equals(1)));
+      .and(codeMasterWinByFinalize.or(codeMasterWinByMaxAttempts))
+      .or(isCodeBreaker.and(codeBreakerWin));
+
     isWinner.assertTrue('You are not the winner of this game!');
 
     const { rewardAmount } = separateRewardAndFinalizeSlot(

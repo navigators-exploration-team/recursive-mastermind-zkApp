@@ -82,10 +82,9 @@ const StepProgram = ZkProgram({
         const solutionHash = Poseidon.hash([...secretCombination, salt]);
 
         //! Verify the signature of code master
-        authInputs.authSignature.verify(authInputs.authPubKey, [
-          unseparatedSecretCombination,
-          salt,
-        ]);
+        authInputs.authSignature
+          .verify(authInputs.authPubKey, [unseparatedSecretCombination, salt])
+          .assertTrue('Invalid signature!');
         const codeMasterId = Poseidon.hash(authInputs.authPubKey.toFields());
 
         return {
