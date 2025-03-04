@@ -15,10 +15,12 @@ import {
 
 import {
   checkIfSolved,
+  compressRewardAndFinalizeSlot,
   compressTurnCountMaxAttemptSolved,
   deserializeClue,
   getClueFromGuess,
   separateCombinationDigits,
+  separateRewardAndFinalizeSlot,
   separateTurnCountAndMaxAttemptSolved,
   serializeClue,
   validateCombination,
@@ -28,35 +30,76 @@ import { StepProgramProof } from './stepProgram.js';
 export const GAME_DURATION = 10; // 10 slots
 
 export class MastermindZkApp extends SmartContract {
+  /**
+   * `turnCountMaxAttemptsIsSolved` is a compressed state variable that
+   * stores the current turn count, maximum number of attempts allowed, and whether the game has been solved.
+   * Uses `compressTurnCountMaxAttemptSolved` to compress the state variable.
+   * The state variable is decompressed using `separateTurnCountAndMaxAttemptSolved`.
+   */
   @state(Field) turnCountMaxAttemptsIsSolved = State<Field>();
-  @state(Field) codeMasterId = State<Field>();
-  @state(Field) codeBreakerId = State<Field>();
-  @state(Field) refereeId = State<Field>();
-  @state(Field) solutionHash = State<Field>();
-  @state(Field) unseparatedGuess = State<Field>();
-  @state(Field) serializedClue = State<Field>();
-  @state(UInt32) finalizeSlot = State<UInt32>();
 
   /**
-   * @returns The balance of the contract.
+   * `codeMasterId` is the ID of the codeMaster `Hash(PubKey)` who created the game.
    */
-  @method.returns(UInt64) async getContractBalance() {
-    const accountUpdate = AccountUpdate.create(this.address);
-    const tokenBalance = accountUpdate.account.balance.get(); // getAndReqEq ??
-    return tokenBalance;
-  }
+  @state(Field) codeMasterId = State<Field>();
+
+  /**
+   * `codeBreakerId` is the ID of the codeBreaker `Hash(PubKey)` who accepted the game.
+   */
+  @state(Field) codeBreakerId = State<Field>();
+
+  /**
+   * `refereeId` is the ID of the referee `Hash(PubKey)` who penalizes misbehaving players.
+   */
+  @state(Field) refereeId = State<Field>();
+
+  /**
+   * `solutionHash` is the hash of the secret combination and salt.
+   */
+  @state(Field) solutionHash = State<Field>();
+
+  /**
+   * `unseparatedGuess` is the last guess made by the codeBreaker.
+   */
+  @state(Field) unseparatedGuess = State<Field>();
+
+  /**
+   * `serializedClue` is the serialized clue given by the codeMaster to the codeBreaker.
+   */
+  @state(Field) serializedClue = State<Field>();
+
+  /**
+   * `rewardFinalizeSlot` is a compressed state variable that stores the reward amount(`UInt64`) and the slot(`UInt32`) when the game is finalized.
+   * Uses `compressRewardAndFinalizeSlot` to compress the state variable.
+   * The state variable is decompressed using `separateRewardAndFinalizeSlot`.
+   */
+  @state(Field) rewardFinalizeSlot = State<Field>();
 
   /**
    * Asserts that the game has been finalized. For internal use only.
    */
-  @method async assertFinalized() {
-    const currentSlot =
-      this.network.globalSlotSinceGenesis.getAndRequireEquals();
-    const finalizeSlot = this.finalizeSlot.getAndRequireEquals();
-    currentSlot.assertGreaterThanOrEqual(
-      finalizeSlot,
-      'The game has not been finalized yet!'
+  async assertFinalized() {
+    const { finalizeSlot } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
     );
+    this.network.globalSlotSinceGenesis
+      .getAndRequireEquals()
+      .assertGreaterThanOrEqual(
+        finalizeSlot,
+        'The game has not been finalized yet!'
+      );
+  }
+
+  /**
+   * Asserts that the game is still ongoing. For internal use only.
+   */
+  async assertNotFinalized() {
+    const { finalizeSlot } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
+    );
+    this.network.globalSlotSinceGenesis
+      .getAndRequireEquals()
+      .assertLessThan(finalizeSlot, 'The game has already been finalized!');
   }
 
   async deploy() {
@@ -68,16 +111,24 @@ export class MastermindZkApp extends SmartContract {
         Permissions.VerificationKey.impossibleDuringCurrentVersion(),
       setPermissions: Permissions.impossible(),
       send: Permissions.proof(),
-      receive: Permissions.proof(),
     });
   }
 
   /**
-   * Initializes the game by setting the maximum number of attempts allowed. All other state variables are set to 0.
+   * Initializes the game, sets the secret combination, maximum attempts, referee, and reward amount.
+   * @param unseparatedSecretCombination The secret combination to be solved by the codeBreaker.
+   * @param salt The salt to be used in the hash function to prevent pre-image attacks.
    * @param maxAttempts The maximum number of total turns allowed for the game.
    * @param refereePubKey The public key of the referee who will penalize misbehaving players.
+   * @param rewardAmount The amount of tokens to be rewarded to the codeBreaker upon solving the game.
    */
-  @method async initGame(maxAttempts: Field, refereePubKey: PublicKey) {
+  @method async initGame(
+    unseparatedSecretCombination: Field,
+    salt: Field,
+    maxAttempts: Field,
+    refereePubKey: PublicKey,
+    rewardAmount: UInt64
+  ) {
     const isInitialized = this.account.provedState.getAndRequireEquals();
     isInitialized.assertFalse('The game has already been initialized!');
 
@@ -94,40 +145,16 @@ export class MastermindZkApp extends SmartContract {
       'The maximum number of attempts allowed is 15!'
     );
 
-    const turnCountMaxAttemptsIsSolved = compressTurnCountMaxAttemptSolved([
-      Field.from(0),
-      maxAttempts,
-      Field.from(0),
-    ]);
-
-    this.turnCountMaxAttemptsIsSolved.set(turnCountMaxAttemptsIsSolved);
+    this.turnCountMaxAttemptsIsSolved.set(
+      compressTurnCountMaxAttemptSolved([
+        Field.from(1), // Turn count starts from 1
+        maxAttempts, // Maximum number of attempts
+        Field.from(0), // Game is not solved yet
+      ])
+    );
 
     const refereeId = Poseidon.hash(refereePubKey.toFields());
     this.refereeId.set(refereeId);
-  }
-
-  /**
-   * Creates a new game by setting the secret combination and salt.
-   * @param unseparatedSecretCombination The secret combination to be solved by the codeBreaker.
-   * @param salt The salt to be used in the hash function to prevent pre-image attacks.
-   * @param rewardAmount The amount of tokens to be rewarded to the codeBreaker upon solving the game.
-   * @throws If the game has not been initialized yet, or if the game has already been created.
-   */
-  @method async createGame(
-    unseparatedSecretCombination: Field,
-    salt: Field,
-    rewardAmount: UInt64
-  ) {
-    const isInitialized = this.account.provedState.getAndRequireEquals();
-    isInitialized.assertTrue('The game has not been initialized yet!');
-
-    const [turnCount, maxAttempts, isSolved] =
-      separateTurnCountAndMaxAttemptSolved(
-        this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
-      );
-
-    //! Restrict this method to be only called once at the beginning of a game
-    turnCount.assertEquals(0, 'A mastermind game is already created!');
 
     //! Separate combination digits and validate
     const secretCombination = separateCombinationDigits(
@@ -140,27 +167,20 @@ export class MastermindZkApp extends SmartContract {
     const solutionHash = Poseidon.hash([...secretCombination, salt]);
     this.solutionHash.set(solutionHash);
 
-    // Generate codeMaster ID
-    const codeMasterId = Poseidon.hash(
-      this.sender.getAndRequireSignature().toFields()
-    );
+    const sender = this.sender.getUnconstrained();
 
-    // Store codeMaster ID on-chain
+    // Generate codeMaster ID & store on-chain
+    const codeMasterId = Poseidon.hash(sender.toFields());
     this.codeMasterId.set(codeMasterId);
 
-    // Increment on-chain turnCount
-    const updatedTurnCountMaxAttemptsIsSolved =
-      compressTurnCountMaxAttemptSolved([
-        turnCount.add(1),
-        maxAttempts,
-        isSolved,
-      ]);
-    this.turnCountMaxAttemptsIsSolved.set(updatedTurnCountMaxAttemptsIsSolved);
-
-    const codeMasterUpdate = AccountUpdate.createSigned(
-      this.sender.getAndRequireSignature()
-    );
+    // Get the reward amount from the codeMaster
+    const codeMasterUpdate = AccountUpdate.createSigned(sender);
     codeMasterUpdate.send({ to: this.address, amount: rewardAmount });
+
+    // Update the on-chain reward amount
+    this.rewardFinalizeSlot.set(
+      compressRewardAndFinalizeSlot(rewardAmount, UInt32.zero)
+    );
   }
 
   /**
@@ -184,23 +204,31 @@ export class MastermindZkApp extends SmartContract {
 
     turnCount.assertEquals(1, 'The game has not been created yet!');
 
-    const codeBreakerUpdate = AccountUpdate.createSigned(
-      this.sender.getAndRequireSignature()
+    // Get the reward amount from the on-chain state
+    const { rewardAmount } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
     );
-    const rewardAmount = await this.getContractBalance();
+
+    const sender = this.sender.getUnconstrained();
+
+    // Transfer the reward amount to the contract from the codeBreaker
+    const codeBreakerUpdate = AccountUpdate.createSigned(sender);
     codeBreakerUpdate.send({ to: this.address, amount: rewardAmount });
 
-    // generate codeBreaker ID
-    const codeBreakerId = Poseidon.hash(
-      this.sender.getAndRequireSignature().toFields()
-    );
-
+    // generate codeBreaker ID and store on-chain
+    const codeBreakerId = Poseidon.hash(sender.toFields());
     this.codeBreakerId.set(codeBreakerId);
 
     const currentSlot =
       this.network.globalSlotSinceGenesis.getAndRequireEquals();
     // Set the finalize slot to GAME_DURATION slots after the current slot (slot time is 3 minutes)
-    this.finalizeSlot.set(currentSlot.add(UInt32.from(GAME_DURATION)));
+    const finalizeSlot = currentSlot.add(UInt32.from(GAME_DURATION));
+    this.rewardFinalizeSlot.set(
+      compressRewardAndFinalizeSlot(
+        rewardAmount.add(rewardAmount),
+        finalizeSlot
+      )
+    );
   }
 
   /**
@@ -218,13 +246,7 @@ export class MastermindZkApp extends SmartContract {
       'The game has not been accepted by the codeBreaker yet!'
     );
 
-    const currentSlot =
-      this.network.globalSlotSinceGenesis.getAndRequireEquals();
-    const finalizeSlot = this.finalizeSlot.getAndRequireEquals();
-    currentSlot.assertLessThan(
-      finalizeSlot,
-      'The game has already been finalized!'
-    );
+    await this.assertNotFinalized();
 
     // Check if the game has been solved
     let [turnCount, maxAttempts, isSolved] =
@@ -281,43 +303,13 @@ export class MastermindZkApp extends SmartContract {
   }
 
   /**
-   * Allows the codeBreaker to claim the reward if they have solved the game.
-   * @throws If the game has not been solved yet, or if the caller is not the codeBreaker.
+   * Allows the winner to claim the reward.
+   * @throws If the game has not been finalized yet, or if the caller is not the winner.
    */
-  @method async claimCodeBreakerReward() {
+  @method async claimReward() {
     let [, , isSolved] = separateTurnCountAndMaxAttemptSolved(
       this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
     );
-
-    isSolved.assertEquals(1, 'The game has not been solved yet!');
-
-    await this.assertFinalized();
-
-    const claimer = this.sender.getAndRequireSignature();
-
-    const codeBreakerId = this.codeBreakerId.getAndRequireEquals();
-    const computedCodebreakerId = Poseidon.hash(claimer.toFields());
-
-    codeBreakerId.assertEquals(
-      computedCodebreakerId,
-      'You are not the codeBreaker of this game!'
-    );
-
-    const rewardAmount = await this.getContractBalance();
-
-    this.send({ to: claimer, amount: rewardAmount });
-  }
-
-  /**
-   * Allows the codeMaster to claim the reward if the codeBreaker could not solve the game.
-   * @throws If the game has been solved, or if the caller is not the codeMaster.
-   */
-  @method async claimCodeMasterReward() {
-    let [, , isSolved] = separateTurnCountAndMaxAttemptSolved(
-      this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
-    );
-
-    isSolved.assertEquals(0, 'The game has been solved!');
 
     await this.assertFinalized();
 
@@ -326,21 +318,33 @@ export class MastermindZkApp extends SmartContract {
     const codeMasterId = this.codeMasterId.getAndRequireEquals();
     const computedCodeMasterId = Poseidon.hash(claimer.toFields());
 
-    codeMasterId.assertEquals(
-      computedCodeMasterId,
-      'You are not the codeMaster of this game!'
+    const codeBreakerId = this.codeBreakerId.getAndRequireEquals();
+    const computedCodebreakerId = Poseidon.hash(claimer.toFields());
+
+    const isCodeMaster = codeMasterId.equals(computedCodeMasterId);
+    const isCodeBreaker = codeBreakerId.equals(computedCodebreakerId);
+
+    isCodeMaster
+      .or(isCodeBreaker)
+      .assertTrue('You are not the codeMaster or codeBreaker of this game!');
+
+    const isWinner = isCodeMaster
+      .and(isSolved.equals(0))
+      .or(isCodeBreaker.and(isSolved.equals(1)));
+    isWinner.assertTrue('You are not the winner of this game!');
+
+    const { rewardAmount } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
     );
-
-    const rewardAmount = await this.getContractBalance();
-
     this.send({ to: claimer, amount: rewardAmount });
   }
 
   /**
-   * Allows the referee to penalize the codeBreaker if they have not make a guess within the time limit.
-   * @throws If the the caller is not the referee.
+   * Allows the referee to forfeit the game and reward the winner.
+   * @param playerPubKey The public key of the player to be rewarded.
+   * @throws If the game has not been finalized yet, if the caller is not the referee, or if the provided public key is not a player in the game.
    */
-  @method async penalizeCodeBreaker(codeMasterPubKey: PublicKey) {
+  @method async forfeitWin(playerPubKey: PublicKey) {
     const isInitialized = this.account.provedState.getAndRequireEquals();
     isInitialized.assertTrue('The game has not been initialized yet!');
 
@@ -354,46 +358,33 @@ export class MastermindZkApp extends SmartContract {
       'You are not the referee of this game!'
     );
 
-    const codeMasterId = Poseidon.hash(codeMasterPubKey.toFields());
-    this.codeMasterId
+    const playerID = Poseidon.hash(playerPubKey.toFields());
+    const isCodeBreaker = this.codeBreakerId
       .getAndRequireEquals()
-      .assertEquals(
-        codeMasterId,
-        'The code master ID is not same as the one stored on-chain!'
-      );
+      .equals(playerID);
+    const isCodeMaster = this.codeMasterId
+      .getAndRequireEquals()
+      .equals(playerID);
 
-    const rewardAmount = await this.getContractBalance();
-    this.send({ to: codeMasterPubKey, amount: rewardAmount });
-  }
+    isCodeBreaker
+      .or(isCodeMaster)
+      .assertTrue('The provided public key is not a player in this game!');
 
-  /**
-   * Allows the referee to penalize the codeMaster if they have not give clue within the time limit.
-   * @throws If the the caller is not the referee.
-   */
-  @method async penalizeCodeMaster(codeBreakerPubKey: PublicKey) {
-    const isInitialized = this.account.provedState.getAndRequireEquals();
-    isInitialized.assertTrue('The game has not been initialized yet!');
-
-    const refereeId = this.refereeId.getAndRequireEquals();
-    const computedRefereeId = Poseidon.hash(
-      this.sender.getAndRequireSignature().toFields()
+    const { rewardAmount, finalizeSlot } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
     );
 
-    refereeId.assertEquals(
-      computedRefereeId,
-      'You are not the referee of this game!'
+    rewardAmount.assertGreaterThan(
+      UInt64.zero,
+      'There is no reward in the pool!'
     );
 
-    const codeBreakerId = Poseidon.hash(codeBreakerPubKey.toFields());
-    this.codeBreakerId
-      .getAndRequireEquals()
-      .assertEquals(
-        codeBreakerId,
-        'The code breaker ID is not same as the one stored on-chain!'
-      );
+    this.send({ to: playerPubKey, amount: rewardAmount });
 
-    const rewardAmount = await this.getContractBalance();
-    this.send({ to: codeBreakerPubKey, amount: rewardAmount });
+    // Set the reward amount to 0 and finalize the game
+    this.rewardFinalizeSlot.set(
+      compressRewardAndFinalizeSlot(UInt64.zero, finalizeSlot)
+    );
   }
 
   /**
@@ -405,13 +396,7 @@ export class MastermindZkApp extends SmartContract {
     const isInitialized = this.account.provedState.getAndRequireEquals();
     isInitialized.assertTrue('The game has not been initialized yet!');
 
-    const currentSlot =
-      this.network.globalSlotSinceGenesis.getAndRequireEquals();
-    const finalizeSlot = this.finalizeSlot.getAndRequireEquals();
-    currentSlot.assertLessThan(
-      finalizeSlot,
-      'The game has already been finalized!'
-    );
+    await this.assertNotFinalized();
 
     const [turnCount, maxAttempts, isSolved] =
       separateTurnCountAndMaxAttemptSolved(
@@ -486,13 +471,7 @@ export class MastermindZkApp extends SmartContract {
     const isInitialized = this.account.provedState.getAndRequireEquals();
     isInitialized.assertTrue('The game has not been initialized yet!');
 
-    const currentSlot =
-      this.network.globalSlotSinceGenesis.getAndRequireEquals();
-    const finalizeSlot = this.finalizeSlot.getAndRequireEquals();
-    currentSlot.assertLessThan(
-      finalizeSlot,
-      'The game has already been finalized!'
-    );
+    await this.assertNotFinalized();
 
     const [turnCount, maxAttempts, isSolved] =
       separateTurnCountAndMaxAttemptSolved(

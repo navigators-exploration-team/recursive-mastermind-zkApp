@@ -1,5 +1,8 @@
 import {
+  compressRewardAndFinalizeSlot,
   compressTurnCountMaxAttemptSolved,
+  separateTurnCountAndMaxAttemptSolved,
+  separateRewardAndFinalizeSlot,
   getClueFromGuess,
   separateCombinationDigits,
   validateCombination,
@@ -13,7 +16,7 @@ import {
   deserializeClueHistory,
 } from '../utils';
 
-import { Field } from 'o1js';
+import { Field, UInt32, UInt64 } from 'o1js';
 
 /*
  * Random combination generator function for utility function tests.
@@ -191,7 +194,9 @@ describe('Provable utilities - unit tests', () => {
 
       expect(clue).toEqual([1, 1, 1, 1].map(Field));
     });
+  });
 
+  describe('Tests for compressTurnCountMaxAttemptSolved function', () => {
     it('should compress the turn count, max attempt, and solved flag into a single Field value', () => {
       const turnCount = Field(5);
       const maxAttempts = Field(10);
@@ -240,9 +245,30 @@ describe('Provable utilities - unit tests', () => {
       const compressedValue = Field(51001);
       const expectedDigits = [5, 10, 1].map(Field);
 
-      expect(compressTurnCountMaxAttemptSolved(expectedDigits)).toEqual(
-        compressedValue
+      expect(separateTurnCountAndMaxAttemptSolved(compressedValue)).toEqual(
+        expectedDigits
       );
+    });
+  });
+
+  describe('Tests for compressRewardAndFinalizeSlot function', () => {
+    const rewardAmount = UInt64.from(100);
+    const finalizeSlot = UInt32.from(10);
+    it('should compress the reward amount and finalize slot into a single Field value', () => {
+      const expectedValue = Field(2 ** 32 * 100 + 10);
+      expect(compressRewardAndFinalizeSlot(rewardAmount, finalizeSlot)).toEqual(
+        expectedValue
+      );
+    });
+
+    it('should successfully separate the compressed value into reward amount and finalize slot', () => {
+      const compressedValue = Field(2 ** 32 * 100 + 10);
+
+      const separatedRewardAndFinalizeSlot =
+        separateRewardAndFinalizeSlot(compressedValue);
+
+      expect(separatedRewardAndFinalizeSlot.finalizeSlot).toEqual(finalizeSlot);
+      expect(separatedRewardAndFinalizeSlot.rewardAmount).toEqual(rewardAmount);
     });
   });
 

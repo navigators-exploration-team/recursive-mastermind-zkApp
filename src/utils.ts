@@ -1,4 +1,4 @@
-import { Field, Bool, Provable } from 'o1js';
+import { Field, Bool, Provable, UInt64, UInt32 } from 'o1js';
 
 export {
   separateCombinationDigits,
@@ -12,6 +12,8 @@ export {
   checkIfSolved,
   compressTurnCountMaxAttemptSolved,
   separateTurnCountAndMaxAttemptSolved,
+  compressRewardAndFinalizeSlot,
+  separateRewardAndFinalizeSlot,
   serializeCombinationHistory,
   deserializeCombinationHistory,
   updateElementAtIndex,
@@ -203,6 +205,45 @@ function separateTurnCountAndMaxAttemptSolved(value: Field) {
   compressTurnCountMaxAttemptSolved(digits).assertEquals(value);
 
   return digits;
+}
+
+/**
+ * Combines the reward amount and finalize slot into a single Field value.
+ * @param rewardAmount - The amount of reward in `UInt64`.
+ * @param finalizeSlot - The slot at which the game will finalize in `UInt32`.
+ * @returns - The combined Field element representing the compressed reward amount and finalize slot.
+ */
+function compressRewardAndFinalizeSlot(
+  rewardAmount: UInt64,
+  finalizeSlot: UInt32
+) {
+  return rewardAmount.value.mul(2 ** 32).add(finalizeSlot.value);
+}
+
+/**
+ * Separates the reward amount and finalize slot from a single Field value.
+ *
+ * @param value - The Field value to be separated into reward amount and finalize slot.
+ * @returns - An object containing the separated reward amount and finalize slot.
+ */
+function separateRewardAndFinalizeSlot(value: Field) {
+  const digits = Provable.witness(Provable.Array(UInt32, 3), () => {
+    const num = value.toBigInt();
+    return [
+      UInt32.from(num / 18446744073709551616n),
+      UInt32.from((num / 4294967296n) % 4294967296n),
+      UInt32.from(num % 4294967296n),
+    ];
+  });
+
+  let rewardAmount = UInt64.from(digits[0])
+    .mul(2 ** 32)
+    .add(UInt64.from(digits[1]));
+  let finalizeSlot = digits[2];
+
+  compressRewardAndFinalizeSlot(rewardAmount, finalizeSlot).assertEquals(value);
+
+  return { rewardAmount, finalizeSlot };
 }
 
 /**

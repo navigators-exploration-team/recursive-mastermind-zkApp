@@ -1,4 +1,4 @@
-import { MastermindZkApp } from '../Mastermind';
+import { GAME_DURATION, MastermindZkApp } from '../Mastermind';
 
 import {
   Field,
@@ -7,12 +7,13 @@ import {
   PublicKey,
   AccountUpdate,
   Poseidon,
-  Signature,
   UInt64,
+  UInt32,
 } from 'o1js';
 
 import {
   compressCombinationDigits,
+  compressRewardAndFinalizeSlot,
   compressTurnCountMaxAttemptSolved,
   separateCombinationDigits,
   separateTurnCountAndMaxAttemptSolved,
@@ -21,97 +22,176 @@ import {
 
 import { StepProgram, StepProgramProof } from '../stepProgram';
 
-let proofsEnabled = false;
-
-let REWARD_AMOUNT = 100000;
-
-async function localDeploy(
-  zkapp: MastermindZkApp,
-  deployerKey: PrivateKey,
-  zkappPrivateKey: PrivateKey
-) {
-  const deployerAccount = deployerKey.toPublicKey();
-  const tx = await Mina.transaction(deployerAccount, async () => {
-    AccountUpdate.fundNewAccount(deployerAccount);
-    zkapp.deploy();
-  });
-
-  await tx.prove();
-  await tx.sign([deployerKey, zkappPrivateKey]).send();
-}
-
-async function initializeGame(
-  zkapp: MastermindZkApp,
-  deployerKey: PrivateKey,
-  refereeKey: PrivateKey,
-  rounds: number
-) {
-  const deployerAccount = deployerKey.toPublicKey();
-  const refereeAccount = refereeKey.toPublicKey();
-
-  const initTx = await Mina.transaction(deployerAccount, async () => {
-    await zkapp.initGame(Field.from(rounds), refereeAccount);
-  });
-
-  await initTx.prove();
-  await initTx.sign([deployerKey]).send();
-}
+import {
+  StepProgramCreateGame,
+  StepProgramGiveClue,
+  StepProgramMakeGuess,
+} from './testUtils';
 
 describe('Mastermind ZkApp Tests', () => {
-  let codeMasterKey: PrivateKey,
-    codeMasterPubKey: PublicKey,
-    codeMasterSalt: Field,
-    codeBreakerKey: PrivateKey,
-    codeBreakerPubKey: PublicKey,
-    refereeKey: PrivateKey,
-    refereePubKey: PublicKey,
-    intruderKey: PrivateKey,
-    intruderPubKey: PublicKey,
-    zkappAddress: PublicKey,
-    zkappPrivateKey: PrivateKey,
+  // Global variables
+  let proofsEnabled = false;
+  let REWARD_AMOUNT = 100000;
+
+  // Keys
+  let codeMasterKey: PrivateKey;
+  let codeBreakerKey: PrivateKey;
+  let refereeKey: PrivateKey;
+  let intruderKey: PrivateKey;
+
+  // Public keys
+  let codeMasterPubKey: PublicKey;
+  let codeBreakerPubKey: PublicKey;
+  let refereePubKey: PublicKey;
+  let intruderPubKey: PublicKey;
+
+  // ZkApp
+  let zkappAddress: PublicKey;
+  let zkappPrivateKey: PrivateKey;
+  let zkapp: MastermindZkApp;
+
+  // Variables
+  let codeMasterSalt: Field;
+  let secretCombination: number[];
+
+  // Proofs
+  let partialProof: StepProgramProof;
+  let completedProof: StepProgramProof;
+  // let intruderProof: StepProgramProof;
+  let wrongProof: StepProgramProof;
+
+  // Local Mina blockchain
+  let Local: Awaited<ReturnType<typeof Mina.LocalBlockchain>>;
+
+  // Helper functions
+
+  /**
+   * Deploy a fresh Mastermind ZkApp contract.
+   * @param zkapp The MastermindZkApp instance
+   * @param deployerKey Key of the account funding the deploy
+   * @param zkappKey Key of the new zkApp
+   */
+  async function deployZkApp(
     zkapp: MastermindZkApp,
-    unseparatedSecretCombination: Field,
-    intruderProof: StepProgramProof,
-    completedProof: StepProgramProof,
-    partialProof: StepProgramProof,
-    wrongProof: StepProgramProof,
-    Local: Awaited<ReturnType<typeof Mina.LocalBlockchain>>;
+    deployerKey: PrivateKey,
+    zkappPrivateKey: PrivateKey
+  ) {
+    const deployerAccount = deployerKey.toPublicKey();
+    const tx = await Mina.transaction(deployerAccount, async () => {
+      AccountUpdate.fundNewAccount(deployerAccount);
+      await zkapp.deploy();
+    });
 
-  beforeAll(async () => {
-    await StepProgram.compile();
-    await MastermindZkApp.compile();
+    await tx.prove();
+    await tx.sign([deployerKey, zkappPrivateKey]).send();
+  }
 
-    // Set up the Mina local blockchain
-    Local = await Mina.LocalBlockchain({ proofsEnabled });
-    Mina.setActiveInstance(Local);
+  /**
+   * Initialize the game on-chain (sets the secret combination, salt, max attempts, and referee), and funds the contract with the reward amount.
+   * @param zkapp The MastermindZkApp instance
+   * @param deployerKey Key of the account funding the deploy
+   * @param secretCombination The secret combination
+   * @param salt The salt to use protecting from pre-image attacks
+   * @param maxAttempt Number of max attempts allowed
+   * @param refereeKey Key of the referee
+   */
+  async function initializeGame(
+    zkapp: MastermindZkApp,
+    deployerKey: PrivateKey,
+    secretCombination: number[],
+    salt: Field,
+    maxAttempt: number,
+    refereeKey: PrivateKey
+  ) {
+    const deployerAccount = deployerKey.toPublicKey();
+    const refereeAccount = refereeKey.toPublicKey();
 
-    // Local.testAccounts is an array of 10 test accounts that have been pre-filled with Mina
-    codeMasterKey = Local.testAccounts[0].key;
-    codeMasterPubKey = codeMasterKey.toPublicKey();
+    const unseparatedCombination = compressCombinationDigits(
+      secretCombination.map(Field)
+    );
+    const initTx = await Mina.transaction(deployerAccount, async () => {
+      await zkapp.initGame(
+        unseparatedCombination,
+        salt,
+        Field.from(maxAttempt),
+        refereeAccount,
+        UInt64.from(REWARD_AMOUNT)
+      );
+    });
 
-    // Generate random field as salt for the codeMaster
-    codeMasterSalt = Field.random();
+    await initTx.prove();
+    await initTx.sign([deployerKey]).send();
+  }
 
-    codeBreakerKey = Local.testAccounts[1].key;
-    codeBreakerPubKey = codeBreakerKey.toPublicKey();
+  /**
+   * Deploy and initialize the game.
+   * @param zkapp The MastermindZkApp instance
+   * @param deployerKey Key of the account funding the deploy
+   * @param zkappPrivateKey Key of the new zkApp
+   * @param secretCombination The secret combination
+   * @param salt The salt to use protecting from pre-image attacks
+   * @param maxAttempt Number of max attempts allowed
+   * @param refereeKey Key of the referee
+   */
+  async function deployAndInitializeGame(
+    zkapp: MastermindZkApp,
+    deployerKey: PrivateKey,
+    zkappPrivateKey: PrivateKey,
+    secretCombination: number[],
+    salt: Field,
+    maxAttempt: number,
+    refereeKey: PrivateKey
+  ) {
+    const deployerAccount = deployerKey.toPublicKey();
+    const refereeAccount = refereeKey.toPublicKey();
 
-    refereeKey = Local.testAccounts[3].key;
-    refereePubKey = refereeKey.toPublicKey();
+    const unseparatedCombination = compressCombinationDigits(
+      secretCombination.map(Field)
+    );
 
-    intruderKey = Local.testAccounts[2].key;
-    intruderPubKey = intruderKey.toPublicKey();
+    const tx = await Mina.transaction(deployerAccount, async () => {
+      AccountUpdate.fundNewAccount(deployerAccount);
+      await zkapp.deploy();
+      await zkapp.initGame(
+        unseparatedCombination,
+        salt,
+        Field.from(maxAttempt),
+        refereeAccount,
+        UInt64.from(REWARD_AMOUNT)
+      );
+    });
 
-    // Set up the zkapp account
+    await tx.prove();
+    await tx.sign([deployerKey, zkappPrivateKey]).send();
+  }
+
+  /**
+   * Prepare a new game.
+   */
+  async function prepareNewGame() {
     zkappPrivateKey = PrivateKey.random();
     zkappAddress = zkappPrivateKey.toPublicKey();
     zkapp = new MastermindZkApp(zkappAddress);
 
-    unseparatedSecretCombination = Field.from(7163);
-  });
+    await deployAndInitializeGame(
+      zkapp,
+      codeMasterKey,
+      zkappPrivateKey,
+      secretCombination,
+      codeMasterSalt,
+      5,
+      refereeKey
+    );
 
-  async function testInvalidsubmitGameProof(
+    await acceptGame();
+  }
+
+  /**
+   * Helper function to expect a proof submission to fail.
+   */
+  async function expectProofSubmissionToFail(
     proof: StepProgramProof,
-    expectedErrorMessage?: string
+    expectedMsg?: string
   ) {
     const submitGameProofTx = async () => {
       const tx = await Mina.transaction(codeMasterPubKey, async () => {
@@ -122,11 +202,12 @@ describe('Mastermind ZkApp Tests', () => {
       await tx.sign([codeMasterKey]).send();
     };
 
-    await expect(submitGameProofTx()).rejects.toThrowError(
-      expectedErrorMessage
-    );
+    await expect(submitGameProofTx()).rejects.toThrowError(expectedMsg);
   }
 
+  /**
+   * Helper function to submit a game proof.
+   */
   async function submitGameProof(proof: StepProgramProof) {
     const submitGameProofTx = await Mina.transaction(
       codeBreakerKey.toPublicKey(),
@@ -139,79 +220,50 @@ describe('Mastermind ZkApp Tests', () => {
     await submitGameProofTx.sign([codeBreakerKey]).send();
   }
 
-  async function claimcodeBreakerReward() {
-    const codeBreakerBalance = Mina.getBalance(codeBreakerPubKey);
-    const claimRewardTx = await Mina.transaction(
-      codeBreakerPubKey,
-      async () => {
-        await zkapp.claimCodeBreakerReward();
-      }
-    );
-
-    await claimRewardTx.prove();
-    await claimRewardTx.sign([codeBreakerKey]).send();
-
-    const contractBalance = Mina.getBalance(zkappAddress);
-    expect(Number(contractBalance.toBigInt())).toEqual(0);
-
-    const codeBreakerNewBalance = Mina.getBalance(codeBreakerPubKey);
-    expect(
-      Number(codeBreakerNewBalance.toBigInt() - codeBreakerBalance.toBigInt())
-    ).toEqual(2 * REWARD_AMOUNT);
-  }
-
-  async function testInvalidcodeBreakerClaimReward(
-    claimer: PublicKey,
-    claimerKey: PrivateKey,
-    expectedErrorMessage?: string
-  ) {
-    const claimRewardTx = async () => {
-      const tx = await Mina.transaction(claimer, async () => {
-        await zkapp.claimCodeBreakerReward();
-      });
-
-      await tx.prove();
-      await tx.sign([claimerKey]).send();
-    };
-
-    await expect(claimRewardTx()).rejects.toThrowError(expectedErrorMessage);
-  }
-
-  async function claimCodeMasterReward() {
-    const codeMasterBalance = Mina.getBalance(codeMasterPubKey);
-    const claimRewardTx = await Mina.transaction(codeMasterPubKey, async () => {
-      await zkapp.claimCodeMasterReward();
+  /**
+   * Helper function to claim reward from codeBreaker or codeMaster.
+   */
+  async function claimReward(claimer: PublicKey, claimerKey: PrivateKey) {
+    const claimerBalance = Mina.getBalance(claimer);
+    const claimRewardTx = await Mina.transaction(claimer, async () => {
+      await zkapp.claimReward();
     });
 
     await claimRewardTx.prove();
-    await claimRewardTx.sign([codeMasterKey]).send();
+    await claimRewardTx.sign([claimerKey]).send();
 
     const contractBalance = Mina.getBalance(zkappAddress);
     expect(Number(contractBalance.toBigInt())).toEqual(0);
 
-    const codeMasterNewBalance = Mina.getBalance(codeMasterPubKey);
+    const claimerNewBalance = Mina.getBalance(claimer);
     expect(
-      Number(codeMasterNewBalance.toBigInt() - codeMasterBalance.toBigInt())
+      Number(claimerNewBalance.toBigInt() - claimerBalance.toBigInt())
     ).toEqual(2 * REWARD_AMOUNT);
   }
 
-  async function testInvalidcodeMasterClaimReward(
+  /**
+   * Helper to expect claim reward to fail.
+   */
+  async function expectClaimRewardToFail(
     claimer: PublicKey,
     claimerKey: PrivateKey,
-    expectedErrorMessage?: string
+    expectedMsg?: string
   ) {
     const claimRewardTx = async () => {
       const tx = await Mina.transaction(claimer, async () => {
-        await zkapp.claimCodeMasterReward();
+        await zkapp.claimReward();
       });
 
       await tx.prove();
       await tx.sign([claimerKey]).send();
     };
 
-    await expect(claimRewardTx()).rejects.toThrowError(expectedErrorMessage);
+    await expect(claimRewardTx()).rejects.toThrowError(expectedMsg);
   }
 
+  /**
+   * Helper function to accept a game from the codeBreaker.
+   */
   async function acceptGame() {
     const acceptGameTx = await Mina.transaction(codeBreakerPubKey, async () => {
       await zkapp.acceptGame();
@@ -221,222 +273,184 @@ describe('Mastermind ZkApp Tests', () => {
     await acceptGameTx.sign([codeBreakerKey]).send();
   }
 
-  async function testInvalidAcceptGame(expectedErrorMessage?: string) {
-    const acceptGameTx = async () => {
-      const tx = await Mina.transaction(codeBreakerPubKey, async () => {
-        await zkapp.acceptGame();
-      });
+  /**
+   * Helper function to penalize a player.
+   */
+  async function forfeitWinForPlayer(
+    refereeKey: PrivateKey,
+    playerPubKey: PublicKey
+  ) {
+    const refereePubKey = refereeKey.toPublicKey();
+    const playerPrevBalance = Mina.getBalance(playerPubKey);
+    const penaltyTx = await Mina.transaction(refereePubKey, async () => {
+      await zkapp.forfeitWin(playerPubKey);
+    });
 
-      await tx.prove();
-      await tx.sign([codeBreakerKey]).send();
-    };
+    await penaltyTx.prove();
+    await penaltyTx.sign([refereeKey]).send();
 
-    await expect(acceptGameTx()).rejects.toThrowError(expectedErrorMessage);
+    const contractBalance = Mina.getBalance(zkappAddress);
+    expect(Number(contractBalance.toBigInt())).toEqual(0);
+
+    const playerNewBalance = Mina.getBalance(playerPubKey);
+    expect(
+      Number(playerNewBalance.toBigInt() - playerPrevBalance.toBigInt())
+    ).toEqual(2 * REWARD_AMOUNT);
   }
 
-  describe('Game Proof Creation - Wrong Secret', () => {
-    it('Create a new game successfully', async () => {
-      const stepProof = await StepProgram.createGame(
-        {
-          authPubKey: codeMasterPubKey,
-          authSignature: Signature.create(codeMasterKey, [
-            unseparatedSecretCombination,
-            codeMasterSalt,
-          ]),
-        },
-        unseparatedSecretCombination,
-        codeMasterSalt
-      );
+  beforeAll(async () => {
+    // Compile StepProgram and MastermindZkApp
+    await StepProgram.compile();
+    await MastermindZkApp.compile();
 
-      wrongProof = stepProof.proof;
-    });
+    // Set up the Mina local blockchain
+    Local = await Mina.LocalBlockchain({ proofsEnabled });
+    Mina.setActiveInstance(Local);
 
-    it('Solve the game in the first round', async () => {
-      const firstGuess = [7, 1, 6, 3];
-      const unseparatedGuess = compressCombinationDigits(firstGuess.map(Field));
+    // Assign local test accounts
+    codeMasterKey = Local.testAccounts[0].key;
+    codeMasterPubKey = codeMasterKey.toPublicKey();
 
-      const stepProof = await StepProgram.makeGuess(
-        {
-          authPubKey: codeBreakerPubKey,
-          authSignature: Signature.create(codeBreakerKey, [
-            unseparatedGuess,
-            Field.from(
-              wrongProof ? wrongProof.publicOutput.turnCount.toBigInt() : 1
-            ),
-          ]),
-        },
-        wrongProof,
-        unseparatedGuess
-      );
+    codeBreakerKey = Local.testAccounts[1].key;
+    codeBreakerPubKey = codeBreakerKey.toPublicKey();
 
-      wrongProof = stepProof.proof;
-    });
+    intruderKey = Local.testAccounts[2].key;
+    intruderPubKey = intruderKey.toPublicKey();
 
-    it('Give clue and report that the secret is solved', async () => {
-      const unseparatedCombination = compressCombinationDigits(
-        [7, 1, 6, 3].map(Field)
-      );
+    refereeKey = Local.testAccounts[3].key;
+    refereePubKey = refereeKey.toPublicKey();
 
-      const stepProof = await StepProgram.giveClue(
-        {
-          authPubKey: codeMasterPubKey,
-          authSignature: Signature.create(codeMasterKey, [
-            unseparatedCombination,
-            codeMasterSalt,
-            Field.from(
-              wrongProof ? wrongProof.publicOutput.turnCount.toBigInt() : 1
-            ),
-          ]),
-        },
-        wrongProof,
-        unseparatedCombination,
-        codeMasterSalt
-      );
+    // Initialize codeMasterSalt & secret combination
+    codeMasterSalt = Field.random();
+    secretCombination = [7, 1, 6, 3];
 
-      wrongProof = stepProof.proof;
-    });
+    // Prepare brand-new MastermindZkApp for tests
+    zkappPrivateKey = PrivateKey.random();
+    zkappAddress = zkappPrivateKey.toPublicKey();
+    zkapp = new MastermindZkApp(zkappAddress);
+
+    // Base case: Create a new game
+    wrongProof = await StepProgramCreateGame(
+      secretCombination,
+      codeMasterSalt,
+      codeMasterKey
+    );
+
+    // Make a guess with wrong answer
+    wrongProof = await StepProgramMakeGuess(
+      wrongProof,
+      secretCombination,
+      codeBreakerKey
+    );
+
+    // Give clue with wrong answer
+    wrongProof = await StepProgramGiveClue(
+      wrongProof,
+      secretCombination,
+      codeMasterSalt,
+      codeMasterKey
+    );
+
+    secretCombination = [1, 2, 3, 4];
   });
 
-  describe('Deploy and initialize Mastermind', () => {
-    it('Deploy a `Mastermind` zkApp', async () => {
-      await localDeploy(zkapp, codeMasterKey, zkappPrivateKey);
+  describe('Deploy & Initialize Flow', () => {
+    it('Deploy a Mastermind zkApp', async () => {
+      await deployZkApp(zkapp, codeMasterKey, zkappPrivateKey);
     });
 
-    it('Reject sending  Mina to the zkApp without proof', async () => {
-      const sendMinaTx = async () => {
-        const tx = await Mina.transaction(codeMasterPubKey, async () => {
-          const update = AccountUpdate.create(codeBreakerPubKey);
-          update.send({ to: zkappAddress, amount: UInt64.from(100) });
-        });
-
-        await tx.prove();
-        await tx.sign([codeMasterKey]).send();
-      };
-
-      await expect(sendMinaTx()).rejects.toThrow(
-        /Update_not_permitted_balance/
-      );
+    it('Reject calling acceptGame method before initGame', async () => {
+      const expectedMsg = 'The game has not been initialized yet!';
+      await expect(zkapp.acceptGame()).rejects.toThrowError(expectedMsg);
     });
 
-    it('Reject calling `createGame` method before `initGame`', async () => {
-      const createGameTx = async () => {
-        const tx = await Mina.transaction(codeMasterPubKey, async () => {
-          await zkapp.createGame(
-            Field(1234),
-            codeMasterSalt,
-            UInt64.from(REWARD_AMOUNT)
-          );
-        });
-
-        await tx.prove();
-        await tx.sign([codeMasterKey]).send();
-      };
-
-      const expectedErrorMessage = 'The game has not been initialized yet!';
-      await expect(createGameTx()).rejects.toThrowError(expectedErrorMessage);
+    it('Reject calling submitGameProof method before initGame', async () => {
+      const expectedMsg = 'The game has not been initialized yet!';
+      await expectProofSubmissionToFail(wrongProof, expectedMsg);
     });
 
-    it('Reject calling `acceptGame` method before `initGame`', async () => {
-      const expectedErrorMessage = 'The game has not been initialized yet!';
-      await expect(zkapp.acceptGame()).rejects.toThrowError(
-        expectedErrorMessage
-      );
-    });
-
-    it('Reject calling `submitGameProof` method before `initGame`', async () => {
-      const expectedErrorMessage = 'The game has not been initialized yet!';
-      await testInvalidsubmitGameProof(wrongProof, expectedErrorMessage);
-    });
-
-    it('Reject calling `initGame` when maxAttempts exceeds 15', async () => {
+    it('Rejects initGame if maxAttempts > 15', async () => {
       const initTx = async () =>
-        await initializeGame(zkapp, codeMasterKey, refereeKey, 20);
-
-      const expectedErrorMessage =
-        'The maximum number of attempts allowed is 15!';
-      await expect(initTx()).rejects.toThrowError(expectedErrorMessage);
-    });
-
-    it('Reject calling `initGame` when maxAttempts is below 5', async () => {
-      const initTx = async () =>
-        await initializeGame(zkapp, codeMasterKey, refereeKey, 4);
-
-      const expectedErrorMessage =
-        'The minimum number of attempts allowed is 5!';
-      await expect(initTx()).rejects.toThrowError(expectedErrorMessage);
-    });
-
-    it('Initialize game', async () => {
-      const maxAttempts = 5;
-      await initializeGame(zkapp, codeMasterKey, refereeKey, maxAttempts);
-
-      // Initialized with `super.init()`
-      const turnCountMaxAttemptsIsSolved =
-        zkapp.turnCountMaxAttemptsIsSolved.get();
-      expect(turnCountMaxAttemptsIsSolved).toEqual(
-        compressTurnCountMaxAttemptSolved([0, maxAttempts, 0].map(Field))
-      );
-
-      const codeMasterId = zkapp.codeMasterId.get();
-      expect(codeMasterId).toEqual(Field(0));
-
-      const codeBreakerId = zkapp.codeBreakerId.get();
-      expect(codeBreakerId).toEqual(Field(0));
-
-      const solutionHash = zkapp.solutionHash.get();
-      expect(solutionHash).toEqual(Field(0));
-
-      const unseparatedGuess = zkapp.unseparatedGuess.get();
-      expect(unseparatedGuess).toEqual(Field(0));
-
-      const serializedClue = zkapp.serializedClue.get();
-      expect(serializedClue).toEqual(Field(0));
-    });
-  });
-
-  describe('Create a new game on-chain with `createGame` method, then try to submit a proof with wrong secret', () => {
-    it('Reject calling `acceptGame` method before `createGame`', async () => {
-      const expectedErrorMessage = 'The game has not been created yet!';
-      await expect(zkapp.acceptGame()).rejects.toThrowError(
-        expectedErrorMessage
-      );
-    });
-
-    it('Create a new game and set codeMaster successfully', async () => {
-      const tx = await Mina.transaction(codeMasterPubKey, async () => {
-        await zkapp.createGame(
-          Field(1234),
+        await initializeGame(
+          zkapp,
+          codeMasterKey,
+          secretCombination,
           codeMasterSalt,
-          UInt64.from(REWARD_AMOUNT)
+          20,
+          refereeKey
         );
-      });
 
-      await tx.prove();
-      await tx.sign([codeMasterKey]).send();
+      const expectedMsg = 'The maximum number of attempts allowed is 15!';
+      await expect(initTx()).rejects.toThrowError(expectedMsg);
+    });
 
-      const codeMasterId = zkapp.codeMasterId.get();
-      expect(codeMasterId).toEqual(codeMasterId);
+    it('Rejects initGame if maxAttempts < 5', async () => {
+      const initTx = async () =>
+        await initializeGame(
+          zkapp,
+          codeMasterKey,
+          secretCombination,
+          codeMasterSalt,
+          4,
+          refereeKey
+        );
 
-      const solutionHash = zkapp.solutionHash.get();
-      expect(solutionHash).toEqual(
+      const expectedMsg = 'The minimum number of attempts allowed is 5!';
+      await expect(initTx()).rejects.toThrowError(expectedMsg);
+    });
+
+    it('Initializes the game successfully', async () => {
+      const maxAttempts = 5;
+      await initializeGame(
+        zkapp,
+        codeMasterKey,
+        secretCombination,
+        codeMasterSalt,
+        maxAttempts,
+        refereeKey
+      );
+
+      expect(zkapp.turnCountMaxAttemptsIsSolved.get()).toEqual(
+        compressTurnCountMaxAttemptSolved([1, maxAttempts, 0].map(Field))
+      );
+      expect(zkapp.codeMasterId.get()).toEqual(
+        Poseidon.hash(codeMasterPubKey.toFields())
+      );
+      expect(zkapp.refereeId.get()).toEqual(
+        Poseidon.hash(refereePubKey.toFields())
+      );
+      expect(zkapp.solutionHash.get()).toEqual(
         Poseidon.hash([
           ...separateCombinationDigits(Field(1234)),
           codeMasterSalt,
         ])
       );
+      expect(zkapp.rewardFinalizeSlot.get()).toEqual(
+        compressRewardAndFinalizeSlot(
+          UInt64.from(REWARD_AMOUNT),
+          UInt32.from(0)
+        )
+      );
 
-      const contractBalance = Mina.getBalance(zkappAddress);
-      expect(Number(contractBalance.toBigInt())).toEqual(REWARD_AMOUNT);
-    });
+      // All other fields should be 0
+      expect(zkapp.unseparatedGuess.get()).toEqual(Field(0));
+      expect(zkapp.codeBreakerId.get()).toEqual(Field(0));
+      expect(zkapp.serializedClue.get()).toEqual(Field(0));
 
-    it('Reject submitting a proof before game being accepted', async () => {
-      const expectedErrorMessage =
-        'The game has not been accepted by the codeBreaker yet!';
-      await testInvalidsubmitGameProof(wrongProof, expectedErrorMessage);
+      // Contract should be funded with the reward amount
+      expect(Number(Mina.getBalance(zkappAddress).toBigInt())).toEqual(
+        REWARD_AMOUNT
+      );
     });
   });
 
-  describe('Code Breaker accepts game', () => {
+  describe('Accepting a Game', () => {
+    it('Rejects submitGameProof before acceptGame', async () => {
+      const expectedMsg =
+        'The game has not been accepted by the codeBreaker yet!';
+      await expectProofSubmissionToFail(wrongProof, expectedMsg);
+    });
+
     it('Accept the game successfully', async () => {
       const tx = await Mina.transaction(codeBreakerPubKey, async () => {
         await zkapp.acceptGame();
@@ -450,235 +464,97 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Reject accepting the game again', async () => {
-      const expectedErrorMessage =
+      const expectedMsg =
         'The game has already been accepted by the codeBreaker!';
-      await testInvalidAcceptGame(expectedErrorMessage);
+      const acceptGameTx = async () => {
+        const tx = await Mina.transaction(codeBreakerPubKey, async () => {
+          await zkapp.acceptGame();
+        });
+
+        await tx.prove();
+        await tx.sign([codeBreakerKey]).send();
+      };
+
+      await expect(acceptGameTx()).rejects.toThrowError(expectedMsg);
     });
 
     it('Reject submitting a proof with wrong secret', async () => {
-      const expectedErrorMessage =
+      const expectedMsg =
         'The solution hash is not same as the one stored on-chain!';
-      await testInvalidsubmitGameProof(wrongProof, expectedErrorMessage);
+      await expectProofSubmissionToFail(wrongProof, expectedMsg);
     });
 
     it('Reject claiming reward before finalizing', async () => {
-      const expectedErrorMessage = 'The game has not been finalized yet!';
-      await testInvalidcodeBreakerClaimReward(
+      const expectedMsg = 'The game has not been finalized yet!';
+      await expectClaimRewardToFail(
         codeBreakerPubKey,
         codeBreakerKey,
-        expectedErrorMessage
+        expectedMsg
       );
     });
   });
 
-  describe('Intruder tries to submit proof with correct secret', () => {
-    it('Create a new game successfully', async () => {
-      unseparatedSecretCombination = Field.from(1234);
+  describe('Submitting Correct Game Proof and Claiming Reward', () => {
+    beforeAll(async () => {
+      // Build a "completedProof" that solves the game
+      // This portion uses your StepProgram to create valid proofs off-chain.
 
-      const stepProof = await StepProgram.createGame(
-        {
-          authPubKey: intruderPubKey,
-          authSignature: Signature.create(intruderKey, [
-            unseparatedSecretCombination,
-            codeMasterSalt,
-          ]),
-        },
-        unseparatedSecretCombination,
-        codeMasterSalt
+      // 1. createGame
+      partialProof = await StepProgramCreateGame(
+        secretCombination,
+        codeMasterSalt,
+        codeMasterKey
       );
 
-      intruderProof = stepProof.proof;
-    });
-
-    it('Solve in first guess', async () => {
-      const firstGuess = [1, 2, 3, 4];
-      const unseparatedGuess = compressCombinationDigits(firstGuess.map(Field));
-
-      const stepProof = await StepProgram.makeGuess(
-        {
-          authPubKey: codeBreakerPubKey,
-          authSignature: Signature.create(codeBreakerKey, [
-            unseparatedGuess,
-            Field.from(
-              intruderProof
-                ? intruderProof.publicOutput.turnCount.toBigInt()
-                : 1
-            ),
-          ]),
-        },
-        intruderProof,
-        unseparatedGuess
-      );
-
-      intruderProof = stepProof.proof;
-    });
-
-    it('Give clue & report solved', async () => {
-      const unseparatedCombination = compressCombinationDigits(
-        [1, 2, 3, 4].map(Field)
-      );
-
-      const stepProof = await StepProgram.giveClue(
-        {
-          authPubKey: intruderPubKey,
-          authSignature: Signature.create(intruderKey, [
-            unseparatedCombination,
-            codeMasterSalt,
-            Field.from(
-              intruderProof
-                ? intruderProof.publicOutput.turnCount.toBigInt()
-                : 1
-            ),
-          ]),
-        },
-        intruderProof,
-        unseparatedCombination,
-        codeMasterSalt
-      );
-
-      intruderProof = stepProof.proof;
-    });
-
-    it('Reject submitting a proof with correct secret', async () => {
-      const expectedErrorMessage =
-        'The code master ID is not same as the one stored on-chain!';
-      await testInvalidsubmitGameProof(intruderProof, expectedErrorMessage);
-    });
-  });
-
-  describe('Game Proof Creation - Correct secret', () => {
-    it('Create a new game successfully', async () => {
-      unseparatedSecretCombination = Field.from(1234);
-
-      const stepProof = await StepProgram.createGame(
-        {
-          authPubKey: codeMasterPubKey,
-          authSignature: Signature.create(codeMasterKey, [
-            unseparatedSecretCombination,
-            codeMasterSalt,
-          ]),
-        },
-        unseparatedSecretCombination,
-        codeMasterSalt
-      );
-
-      partialProof = stepProof.proof;
-    });
-
-    it('First guess', async () => {
-      const firstGuess = [2, 1, 3, 4];
-      const unseparatedGuess = compressCombinationDigits(firstGuess.map(Field));
-
-      const stepProof = await StepProgram.makeGuess(
-        {
-          authPubKey: codeBreakerPubKey,
-          authSignature: Signature.create(codeBreakerKey, [
-            unseparatedGuess,
-            Field.from(
-              partialProof ? partialProof.publicOutput.turnCount.toBigInt() : 1
-            ),
-          ]),
-        },
+      // 2. makeGuess
+      partialProof = await StepProgramMakeGuess(
         partialProof,
-        unseparatedGuess
+        [2, 1, 3, 4],
+        codeBreakerKey
       );
 
-      partialProof = stepProof.proof;
-    });
-
-    it('First give clue', async () => {
-      const unseparatedCombination = compressCombinationDigits(
-        [1, 2, 3, 4].map(Field)
-      );
-
-      const stepProof = await StepProgram.giveClue(
-        {
-          authPubKey: codeMasterPubKey,
-          authSignature: Signature.create(codeMasterKey, [
-            unseparatedCombination,
-            codeMasterSalt,
-            Field.from(
-              partialProof ? partialProof.publicOutput.turnCount.toBigInt() : 1
-            ),
-          ]),
-        },
+      // 3. giveClue
+      partialProof = await StepProgramGiveClue(
         partialProof,
-        unseparatedCombination,
-        codeMasterSalt
+        secretCombination,
+        codeMasterSalt,
+        codeMasterKey
       );
 
-      partialProof = stepProof.proof;
-    });
-
-    it('Second guess', async () => {
-      const secondGuess = [1, 2, 3, 4];
-      const unseparatedGuess = compressCombinationDigits(
-        secondGuess.map(Field)
-      );
-
-      const stepProof = await StepProgram.makeGuess(
-        {
-          authPubKey: codeBreakerPubKey,
-          authSignature: Signature.create(codeBreakerKey, [
-            unseparatedGuess,
-            Field.from(
-              partialProof ? partialProof.publicOutput.turnCount.toBigInt() : 1
-            ),
-          ]),
-        },
+      // 4. second guess
+      completedProof = await StepProgramMakeGuess(
         partialProof,
-        unseparatedGuess
+        secretCombination,
+        codeBreakerKey
       );
 
-      completedProof = stepProof.proof;
-    });
-
-    it('Give clue and report that the secret is solved', async () => {
-      const unseparatedCombination = compressCombinationDigits(
-        [1, 2, 3, 4].map(Field)
-      );
-
-      const stepProof = await StepProgram.giveClue(
-        {
-          authPubKey: codeMasterPubKey,
-          authSignature: Signature.create(codeMasterKey, [
-            unseparatedCombination,
-            codeMasterSalt,
-            Field.from(
-              completedProof
-                ? completedProof.publicOutput.turnCount.toBigInt()
-                : 1
-            ),
-          ]),
-        },
+      // 5. giveClue & final
+      completedProof = await StepProgramGiveClue(
         completedProof,
-        unseparatedCombination,
-        codeMasterSalt
+        secretCombination,
+        codeMasterSalt,
+        codeMasterKey
       );
-
-      completedProof = stepProof.proof;
     });
-  });
 
-  describe('Try to submit a proof with correct secret after solving the game', () => {
     it('Submit with correct game proof', async () => {
       await submitGameProof(completedProof);
 
-      const [turnCount, maxAttempts, isSolved] =
-        separateTurnCountAndMaxAttemptSolved(
-          zkapp.turnCountMaxAttemptsIsSolved.get()
-        );
+      const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
+        zkapp.turnCountMaxAttemptsIsSolved.get()
+      );
 
-      expect(turnCount.toBigInt()).toEqual(5n);
-      expect(maxAttempts.toBigInt()).toEqual(5n);
+      expect(turnCount.toBigInt()).toEqual(
+        completedProof.publicOutput.turnCount.toBigInt()
+      );
       expect(isSolved.toBigInt()).toEqual(1n);
 
-      const codeBreakerId = zkapp.codeBreakerId.get();
-      expect(codeBreakerId).toEqual(codeBreakerId);
+      expect(zkapp.codeBreakerId.get()).toEqual(
+        Poseidon.hash(codeBreakerPubKey.toFields())
+      );
 
-      const unseparatedGuess = zkapp.unseparatedGuess.get();
-      expect(unseparatedGuess).toEqual(
-        compressCombinationDigits([1, 2, 3, 4].map(Field))
+      expect(zkapp.unseparatedGuess.get()).toEqual(
+        compressCombinationDigits(secretCombination.map(Field))
       );
 
       const serializedClue = zkapp.serializedClue.get();
@@ -686,247 +562,71 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Reject submitting a same proof again', async () => {
-      const expectedErrorMessage = 'The game secret has already been solved!';
-      await testInvalidsubmitGameProof(completedProof, expectedErrorMessage);
+      const expectedMsg = 'The game secret has already been solved!';
+      await expectProofSubmissionToFail(completedProof, expectedMsg);
     });
 
     it('Reject claiming reward before game finalized', async () => {
-      const expectedErrorMessage = 'The game has not been finalized yet!';
-      await testInvalidcodeBreakerClaimReward(
+      const expectedMsg = 'The game has not been finalized yet!';
+      await expectClaimRewardToFail(
         codeBreakerPubKey,
         codeBreakerKey,
-        expectedErrorMessage
+        expectedMsg
       );
+
+      // Move the global slot forward
+      Local.incrementGlobalSlot(GAME_DURATION);
     });
 
-    it('Wait 10 slot for finalize', async () => {
-      Local.incrementGlobalSlot(11);
-
-      expect(Mina.getNetworkState().globalSlotSinceGenesis.toBigint()).toEqual(
-        11n
-      );
+    it('Rejects reward claim from intruder', async () => {
+      const expectedMsg =
+        'You are not the codeMaster or codeBreaker of this game!';
+      await expectClaimRewardToFail(intruderPubKey, intruderKey, expectedMsg);
     });
 
-    it('Reject claiming reward from intruder', async () => {
-      const expectedErrorMessage = 'You are not the codeBreaker of this game!';
-      await testInvalidcodeBreakerClaimReward(
-        intruderPubKey,
-        intruderKey,
-        expectedErrorMessage
-      );
-    });
-
-    it('Code Master claim rejected', async () => {
-      const expectedErrorMessage = 'The game has been solved!';
-      await testInvalidcodeMasterClaimReward(
+    it('Rejects codeMaster claim if they lost', async () => {
+      const expectedMsg = 'You are not the winner of this game!';
+      await expectClaimRewardToFail(
         codeMasterPubKey,
         codeMasterKey,
-        expectedErrorMessage
-      );
-    });
-
-    it('Intruder tries to claim reward', async () => {
-      const expectedErrorMessage = 'You are not the codeBreaker of this game!';
-      await testInvalidcodeBreakerClaimReward(
-        intruderPubKey,
-        intruderKey,
-        expectedErrorMessage
+        expectedMsg
       );
     });
 
     it('Claim reward', async () => {
-      await claimcodeBreakerReward();
+      await claimReward(codeBreakerPubKey, codeBreakerKey);
     });
   });
 
   describe('Code Breaker punished for timeout', () => {
     beforeAll(async () => {
-      zkappPrivateKey = PrivateKey.random();
-      zkappAddress = zkappPrivateKey.toPublicKey();
-      zkapp = new MastermindZkApp(zkappAddress);
-    });
-
-    it('Deploy a `Mastermind` zkApp', async () => {
-      await localDeploy(zkapp, codeMasterKey, zkappPrivateKey);
-    });
-
-    it('Initialize game', async () => {
-      const maxAttempts = 5;
-      await initializeGame(zkapp, codeMasterKey, refereeKey, maxAttempts);
-    });
-
-    it('should create a new game and set codeMaster successfully', async () => {
-      const tx = await Mina.transaction(codeMasterPubKey, async () => {
-        await zkapp.createGame(
-          Field(1234),
-          codeMasterSalt,
-          UInt64.from(REWARD_AMOUNT)
-        );
-      });
-
-      await tx.prove();
-      await tx.sign([codeMasterKey]).send();
-
-      const codeMasterId = zkapp.codeMasterId.get();
-      expect(codeMasterId).toEqual(codeMasterId);
-
-      const solutionHash = zkapp.solutionHash.get();
-      expect(solutionHash).toEqual(
-        Poseidon.hash([
-          ...separateCombinationDigits(Field(1234)),
-          codeMasterSalt,
-        ])
-      );
-
-      const contractBalance = Mina.getBalance(zkappAddress);
-      expect(Number(contractBalance.toBigInt())).toEqual(REWARD_AMOUNT);
-    });
-
-    it('should accept the game successfully', async () => {
-      await acceptGame();
-      const codeBreakerId = zkapp.codeBreakerId.get();
-      expect(codeBreakerId).toEqual(codeBreakerId);
+      await prepareNewGame();
     });
 
     it('penalty for codeBreaker', async () => {
-      const codeMasterBalance = Mina.getBalance(codeMasterPubKey);
-      const penaltyTx = await Mina.transaction(refereePubKey, async () => {
-        await zkapp.penalizeCodeBreaker(codeMasterPubKey);
-      });
-
-      await penaltyTx.prove();
-      await penaltyTx.sign([refereeKey]).send();
-
-      const contractBalance = Mina.getBalance(zkappAddress);
-      expect(Number(contractBalance.toBigInt())).toEqual(0);
-
-      const codeMasterNewBalance = Mina.getBalance(codeMasterPubKey);
-      expect(
-        Number(codeMasterNewBalance.toBigInt() - codeMasterBalance.toBigInt())
-      ).toEqual(2 * REWARD_AMOUNT);
+      await forfeitWinForPlayer(refereeKey, codeMasterPubKey);
     });
   });
 
   describe('Code Master punished for timeout', () => {
     beforeAll(async () => {
-      zkappPrivateKey = PrivateKey.random();
-      zkappAddress = zkappPrivateKey.toPublicKey();
-      zkapp = new MastermindZkApp(zkappAddress);
-    });
-
-    it('Deploy a `Mastermind` zkApp', async () => {
-      await localDeploy(zkapp, codeMasterKey, zkappPrivateKey);
-    });
-
-    it('Initialize game', async () => {
-      const maxAttempts = 5;
-      await initializeGame(zkapp, codeMasterKey, refereeKey, maxAttempts);
-    });
-
-    it('should create a new game and set codeMaster successfully', async () => {
-      const tx = await Mina.transaction(codeMasterPubKey, async () => {
-        await zkapp.createGame(
-          Field(1234),
-          codeMasterSalt,
-          UInt64.from(REWARD_AMOUNT)
-        );
-      });
-
-      await tx.prove();
-      await tx.sign([codeMasterKey]).send();
-
-      const codeMasterId = zkapp.codeMasterId.get();
-      expect(codeMasterId).toEqual(codeMasterId);
-
-      const solutionHash = zkapp.solutionHash.get();
-      expect(solutionHash).toEqual(
-        Poseidon.hash([
-          ...separateCombinationDigits(Field(1234)),
-          codeMasterSalt,
-        ])
-      );
-
-      const contractBalance = Mina.getBalance(zkappAddress);
-      expect(Number(contractBalance.toBigInt())).toEqual(REWARD_AMOUNT);
-    });
-
-    it('should accept the game successfully', async () => {
-      await acceptGame();
-      const codeBreakerId = zkapp.codeBreakerId.get();
-      expect(codeBreakerId).toEqual(codeBreakerId);
+      await prepareNewGame();
     });
 
     it('penalty for codeMaster', async () => {
-      const codeBreakerBalance = Mina.getBalance(codeBreakerPubKey);
-      const penaltyTx = await Mina.transaction(refereePubKey, async () => {
-        await zkapp.penalizeCodeMaster(codeBreakerPubKey);
-      });
-
-      await penaltyTx.prove();
-      await penaltyTx.sign([refereeKey]).send();
-
-      const contractBalance = Mina.getBalance(zkappAddress);
-      expect(Number(contractBalance.toBigInt())).toEqual(0);
-
-      const codeBreakerNewBalance = Mina.getBalance(codeBreakerPubKey);
-      expect(
-        Number(codeBreakerNewBalance.toBigInt() - codeBreakerBalance.toBigInt())
-      ).toEqual(2 * REWARD_AMOUNT);
+      await forfeitWinForPlayer(refereeKey, codeBreakerPubKey);
     });
   });
 
   describe('Code Master wins', () => {
     beforeAll(async () => {
-      zkappPrivateKey = PrivateKey.random();
-      zkappAddress = zkappPrivateKey.toPublicKey();
-      zkapp = new MastermindZkApp(zkappAddress);
-    });
-
-    it('Deploy a `Mastermind` zkApp', async () => {
-      await localDeploy(zkapp, codeMasterKey, zkappPrivateKey);
-    });
-
-    it('Initialize game', async () => {
-      const maxAttempts = 5;
-      await initializeGame(zkapp, codeMasterKey, refereeKey, maxAttempts);
-    });
-
-    it('Create a new game and set codeMaster successfully', async () => {
-      const tx = await Mina.transaction(codeMasterPubKey, async () => {
-        await zkapp.createGame(
-          Field(1234),
-          codeMasterSalt,
-          UInt64.from(REWARD_AMOUNT)
-        );
-      });
-
-      await tx.prove();
-      await tx.sign([codeMasterKey]).send();
-
-      const codeMasterId = zkapp.codeMasterId.get();
-      expect(codeMasterId).toEqual(codeMasterId);
-
-      const solutionHash = zkapp.solutionHash.get();
-      expect(solutionHash).toEqual(
-        Poseidon.hash([
-          ...separateCombinationDigits(Field(1234)),
-          codeMasterSalt,
-        ])
-      );
-
-      const contractBalance = Mina.getBalance(zkappAddress);
-      expect(Number(contractBalance.toBigInt())).toEqual(REWARD_AMOUNT);
-    });
-
-    it('Accept the game successfully', async () => {
-      await acceptGame();
-      const codeBreakerId = zkapp.codeBreakerId.get();
-      expect(codeBreakerId).toEqual(codeBreakerId);
+      await prepareNewGame();
     });
 
     it('makeGuess method', async () => {
-      const firstGuess = [2, 1, 3, 4];
-      const unseparatedGuess = compressCombinationDigits(firstGuess.map(Field));
+      const unseparatedGuess = compressCombinationDigits(
+        [2, 1, 3, 4].map(Field)
+      );
 
       const guessTx = await Mina.transaction(codeBreakerPubKey, async () => {
         await zkapp.makeGuess(unseparatedGuess);
@@ -935,8 +635,7 @@ describe('Mastermind ZkApp Tests', () => {
       await guessTx.prove();
       await guessTx.sign([codeBreakerKey]).send();
 
-      const unseparatedGuessOnChain = zkapp.unseparatedGuess.get();
-      expect(unseparatedGuessOnChain).toEqual(unseparatedGuess);
+      expect(zkapp.unseparatedGuess.get()).toEqual(unseparatedGuess);
     });
 
     it('Intruder tries to give clue', async () => {
@@ -953,9 +652,9 @@ describe('Mastermind ZkApp Tests', () => {
         await tx.sign([intruderKey]).send();
       };
 
-      const expectedErrorMessage =
+      const expectedMsg =
         'Only the codeMaster of this game is allowed to give clue!';
-      await expect(giveClueTx()).rejects.toThrowError(expectedErrorMessage);
+      await expect(giveClueTx()).rejects.toThrowError(expectedMsg);
     });
 
     it('giveClue method', async () => {
@@ -988,13 +687,13 @@ describe('Mastermind ZkApp Tests', () => {
         await tx.sign([intruderKey]).send();
       };
 
-      const expectedErrorMessage = 'You are not the codeBreaker of this game!';
-      await expect(guessTx()).rejects.toThrowError(expectedErrorMessage);
+      const expectedMsg = 'You are not the codeBreaker of this game!';
+      await expect(guessTx()).rejects.toThrowError(expectedMsg);
     });
 
     it('Claim reward successfully', async () => {
-      Local.incrementGlobalSlot(11);
-      await claimCodeMasterReward();
+      Local.incrementGlobalSlot(GAME_DURATION);
+      await claimReward(codeMasterPubKey, codeMasterKey);
     });
   });
 });
