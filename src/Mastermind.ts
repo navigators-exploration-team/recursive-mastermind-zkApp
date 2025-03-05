@@ -27,7 +27,7 @@ import {
 } from './utils.js';
 import { StepProgramProof } from './stepProgram.js';
 
-export const GAME_DURATION = 10; // 10 slots
+export const GAME_DURATION = 30; // 30 slots
 
 export class MastermindZkApp extends SmartContract {
   /**
@@ -365,13 +365,17 @@ export class MastermindZkApp extends SmartContract {
       'You are not the referee of this game!'
     );
 
+    const codeBreakerId = this.codeBreakerId.getAndRequireEquals();
+    const codeMasterId = this.codeMasterId.getAndRequireEquals();
+
+    codeBreakerId.assertNotEquals(
+      Field.from(0),
+      'The game has not been accepted by the codeBreaker yet!'
+    );
+
     const playerID = Poseidon.hash(playerPubKey.toFields());
-    const isCodeBreaker = this.codeBreakerId
-      .getAndRequireEquals()
-      .equals(playerID);
-    const isCodeMaster = this.codeMasterId
-      .getAndRequireEquals()
-      .equals(playerID);
+    const isCodeBreaker = codeBreakerId.equals(playerID);
+    const isCodeMaster = codeMasterId.equals(playerID);
 
     isCodeBreaker
       .or(isCodeMaster)
