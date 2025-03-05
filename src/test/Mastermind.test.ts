@@ -93,30 +93,47 @@ describe('Mastermind ZkApp Tests', () => {
     }
   }
 
+  /**
+   * Wait for a transaction to be included in a block and fetch the account.
+   * @param tx The transaction to wait for
+   * @param keys The keys to sign the transaction
+   * @param accountsToFetch The accounts to fetch after the transaction is included
+   */
   async function waitTransactionAndFetchAccount(
     tx: Awaited<ReturnType<typeof Mina.transaction>>,
     keys: PrivateKey[],
     accountsToFetch?: PublicKey[]
   ) {
-    await tx.prove();
-    const pendingTransaction = await tx.sign(keys).send();
+    try {
+      console.log('proving and sending transaction');
+      await tx.prove();
+      const pendingTransaction = await tx.sign(keys).send();
 
-    if (!localTest) {
-      log(`${MINA_EXPLORER}${pendingTransaction.hash}`);
-      const status = await pendingTransaction.safeWait();
-      if (status.status === 'rejected') {
-        log('Transaction rejected', JSON.stringify(status.errors));
-        throw new Error(
-          'Transaction was rejected: ' + JSON.stringify(status.errors)
-        );
-      }
+      console.log('waiting for transaction to be included in a block');
+      if (!localTest) {
+        log(`${MINA_EXPLORER}${pendingTransaction.hash}`);
+        const status = await pendingTransaction.safeWait();
+        if (status.status === 'rejected') {
+          log('Transaction rejected', JSON.stringify(status.errors));
+          throw new Error(
+            'Transaction was rejected: ' + JSON.stringify(status.errors)
+          );
+        }
 
-      if (accountsToFetch) {
-        await fetchAccounts(accountsToFetch);
+        if (accountsToFetch) {
+          await fetchAccounts(accountsToFetch);
+        }
       }
+    } catch (error) {
+      console.log('error', error);
+      throw error;
     }
   }
 
+  /**
+   * Fetch given accounts from the Mina to local cache.
+   * @param accounts List of account public keys to fetch
+   */
   async function fetchAccounts(accounts: PublicKey[]) {
     if (localTest) return;
     for (let account of accounts) {
