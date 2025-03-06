@@ -99,9 +99,14 @@ export class MastermindZkApp extends SmartContract {
     const { finalizeSlot } = separateRewardAndFinalizeSlot(
       this.rewardFinalizeSlot.getAndRequireEquals()
     );
-    return this.network.globalSlotSinceGenesis
-      .getAndRequireEquals()
-      .greaterThanOrEqual(finalizeSlot);
+
+    const currentSlot = this.network.globalSlotSinceGenesis.get();
+    this.network.globalSlotSinceGenesis.requireBetween(
+      currentSlot,
+      finalizeSlot
+    );
+
+    return currentSlot.greaterThanOrEqual(finalizeSlot);
   }
 
   /**
@@ -239,8 +244,11 @@ export class MastermindZkApp extends SmartContract {
     const codeBreakerId = Poseidon.hash(sender.toFields());
     this.codeBreakerId.set(codeBreakerId);
 
-    const currentSlot =
-      this.network.globalSlotSinceGenesis.getAndRequireEquals();
+    const currentSlot = this.network.globalSlotSinceGenesis.get();
+    this.network.globalSlotSinceGenesis.requireBetween(
+      currentSlot,
+      currentSlot.add(UInt32.from(5))
+    );
     // Set the finalize slot to GAME_DURATION slots after the current slot (slot time is 3 minutes)
     const finalizeSlot = currentSlot.add(UInt32.from(GAME_DURATION));
     this.rewardFinalizeSlot.set(

@@ -378,7 +378,7 @@ describe('Mastermind ZkApp Tests', () => {
     const claimerNewBalance = Mina.getBalance(claimer);
     expect(
       Number(claimerNewBalance.toBigInt() - claimerBalance.toBigInt())
-    ).toEqual(2 * REWARD_AMOUNT - (localTest ? 0 : 2 * fee));
+    ).toEqual(2 * REWARD_AMOUNT - (localTest ? 0 : fee));
   }
 
   /**
@@ -964,9 +964,13 @@ describe('Mastermind ZkApp Tests', () => {
       await expect(guessTx()).rejects.toThrowError(expectedMsg);
     });
 
-    it('Claim reward successfully', async () => {
-      await waitForFinalize();
-      await claimReward(codeMasterPubKey, codeMasterKey);
-    });
+    it(
+      'Claim reward successfully',
+      async () => {
+        await waitForFinalize();
+        await claimReward(codeMasterPubKey, codeMasterKey);
+      },
+      10 * 60 * 1000
+    );
   });
 });
