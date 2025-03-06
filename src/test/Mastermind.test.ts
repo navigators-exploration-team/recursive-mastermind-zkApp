@@ -542,8 +542,12 @@ describe('Mastermind ZkApp Tests', () => {
 
   beforeAll(async () => {
     // Compile StepProgram and MastermindZkApp
-    await StepProgram.compile();
-    await MastermindZkApp.compile();
+    await StepProgram.compile({
+      // proofsEnabled,
+    });
+    if (testEnvironment !== 'local') {
+      await MastermindZkApp.compile();
+    }
 
     if (testEnvironment === 'local') {
       // Set up the Mina local blockchain
