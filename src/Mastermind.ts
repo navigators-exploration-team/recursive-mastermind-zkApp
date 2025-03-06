@@ -11,6 +11,7 @@ import {
   UInt32,
   Permissions,
   Provable,
+  Struct,
 } from 'o1js';
 
 import {
@@ -28,6 +29,16 @@ import {
 import { StepProgramProof } from './stepProgram.js';
 
 export const GAME_DURATION = 30; // 30 slots
+
+export class NewGameEvent extends Struct({
+  rewardAmount: UInt64,
+  maxAttempts: Field,
+}) {}
+
+export class GameAcceptedEvent extends Struct({
+  codeBreakerPubKey: PublicKey,
+  finalizeSlot: UInt32,
+}) {}
 
 export class MastermindZkApp extends SmartContract {
   /**
@@ -74,6 +85,11 @@ export class MastermindZkApp extends SmartContract {
    * The state variable is decompressed using `separateRewardAndFinalizeSlot`.
    */
   @state(Field) rewardFinalizeSlot = State<Field>();
+
+  readonly events = {
+    newGame: NewGameEvent,
+    gameAccepted: GameAcceptedEvent,
+  };
 
   /**
    * Checks if the game has been finalized.
@@ -176,6 +192,15 @@ export class MastermindZkApp extends SmartContract {
     this.rewardFinalizeSlot.set(
       compressRewardAndFinalizeSlot(rewardAmount, UInt32.zero)
     );
+
+    // Emit the newGame event to be listened to by the server
+    this.emitEvent(
+      'newGame',
+      new NewGameEvent({
+        rewardAmount,
+        maxAttempts,
+      })
+    );
   }
 
   /**
@@ -223,6 +248,15 @@ export class MastermindZkApp extends SmartContract {
         rewardAmount.add(rewardAmount),
         finalizeSlot
       )
+    );
+
+    // Emit the gameAccepted event to be listened to by the server
+    this.emitEvent(
+      'gameAccepted',
+      new GameAcceptedEvent({
+        codeBreakerPubKey: sender,
+        finalizeSlot,
+      })
     );
   }
 
