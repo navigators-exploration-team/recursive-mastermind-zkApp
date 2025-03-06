@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { GAME_DURATION, MastermindZkApp } from '../Mastermind';
 
 import {
@@ -105,11 +104,11 @@ describe('Mastermind ZkApp Tests', () => {
     accountsToFetch?: PublicKey[]
   ) {
     try {
-      console.log('proving and sending transaction');
+      log('proving and sending transaction');
       await tx.prove();
       const pendingTransaction = await tx.sign(keys).send();
 
-      console.log('waiting for transaction to be included in a block');
+      log('waiting for transaction to be included in a block');
       if (!localTest) {
         log(`${MINA_EXPLORER}${pendingTransaction.hash}`);
         const status = await pendingTransaction.safeWait();
@@ -125,7 +124,7 @@ describe('Mastermind ZkApp Tests', () => {
         }
       }
     } catch (error) {
-      console.log('error', error);
+      log('error', error);
       throw error;
     }
   }
