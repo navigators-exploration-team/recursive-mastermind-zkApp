@@ -21,6 +21,7 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
     "testw": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "lint": "npx eslint src/* --fix",
+    "format:check": "prettier --check .",
     "benchmark": "tsc && node --experimental-vm-modules build/src/benchmark/node/benchmark.js"
   },
   "devDependencies": {

@@ -1,8 +1,10 @@
-name: zkApp tests
+name: Integration Tests
+
 on:
   push:
   pull_request:
-  workflow_dispatch: {}
+  workflow_dispatch:
+
 jobs:
   test:
     timeout-minutes: 30
@@ -13,16 +15,35 @@ jobs:
         node: [18, 20]
         os: [ubuntu-latest]
     steps:
+      - name: Git checkout
+        uses: actions/checkout@v4
+
       - name: Set up NodeJS
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - name: Git checkout
-        uses: actions/checkout@v4
-      - name: NPM ci, build, & test
-        run: |
-          npm ci
-          npm run build --if-present
-          npm test
+
+      - name: Cache node modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ matrix.node }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ matrix.node }}-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build --if-present
+
+      - name: Lint code
+        run: npm run lint
+
+      - name: Check code formatting
+        run: npm run format:check
+
+      - name: Run tests
+        run: npm test
         env:
           CI: true
