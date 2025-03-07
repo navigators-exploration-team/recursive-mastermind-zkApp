@@ -19,11 +19,15 @@ import {
   compressRewardAndFinalizeSlot,
   compressTurnCountMaxAttemptSolved,
   deserializeClue,
+  deserializeCombinationHistory,
   getClueFromGuess,
+  getElementAtIndex,
   separateCombinationDigits,
   separateRewardAndFinalizeSlot,
   separateTurnCountAndMaxAttemptSolved,
   serializeClue,
+  serializeCombinationHistory,
+  updateElementAtIndex,
   validateCombination,
 } from './utils.js';
 import { StepProgramProof } from './stepProgram.js';
@@ -70,14 +74,14 @@ export class MastermindZkApp extends SmartContract {
   @state(Field) solutionHash = State<Field>();
 
   /**
-   * `unseparatedGuess` is the last guess made by the codeBreaker.
+   * `packedGuessHistory` is the compressed state variable that stores the history of guesses made by the codeBreaker.
    */
-  @state(Field) unseparatedGuess = State<Field>();
+  @state(Field) packedGuessHistory = State<Field>();
 
   /**
-   * `serializedClue` is the serialized clue given by the codeMaster to the codeBreaker.
+   * `packedClueHistory` is the compressed state variable that stores the history of clues given by the codeMaster.
    */
-  @state(Field) serializedClue = State<Field>();
+  @state(Field) packedClueHistory = State<Field>();
 
   /**
    * `rewardFinalizeSlot` is a compressed state variable that stores the reward amount(`UInt64`) and the slot(`UInt32`) when the game is finalized.
@@ -326,8 +330,8 @@ export class MastermindZkApp extends SmartContract {
       .toField();
 
     this.codeBreakerId.set(proof.publicOutput.codeBreakerId);
-    this.unseparatedGuess.set(proof.publicOutput.lastGuess);
-    this.serializedClue.set(proof.publicOutput.serializedClue);
+    this.packedGuessHistory.set(proof.publicOutput.packedGuessHistory);
+    this.packedClueHistory.set(proof.publicOutput.packedClueHistory);
 
     const updatedTurnCountMaxAttemptsIsSolved =
       compressTurnCountMaxAttemptSolved([
@@ -500,8 +504,20 @@ export class MastermindZkApp extends SmartContract {
     const guessDigits = separateCombinationDigits(unseparatedGuess);
     validateCombination(guessDigits);
 
-    // Update the on-chain unseparated guess
-    this.unseparatedGuess.set(unseparatedGuess);
+    const guessHistory = deserializeCombinationHistory(
+      this.packedGuessHistory.getAndRequireEquals()
+    );
+    const updatedGuessHistory = updateElementAtIndex(
+      unseparatedGuess,
+      guessHistory,
+      turnCount.sub(1).div(2)
+    );
+
+    const serializedUpdatedGuessHistory =
+      serializeCombinationHistory(updatedGuessHistory);
+
+    // Update the on-chain guess history
+    this.packedGuessHistory.set(serializedUpdatedGuessHistory);
 
     // Increment turnCount and wait for the codeMaster to give a clue
     const updatedTurnCountMaxAttemptsIsSolved =
@@ -576,15 +592,33 @@ export class MastermindZkApp extends SmartContract {
       );
 
     // Fetch & separate the on-chain guess
-    const unseparatedGuess = this.unseparatedGuess.getAndRequireEquals();
-    const guessDigits = separateCombinationDigits(unseparatedGuess);
+    const guessHistory = deserializeCombinationHistory(
+      this.packedGuessHistory.getAndRequireEquals()
+    );
+
+    const guessIndex = turnCount.div(2).sub(1);
+    const latestGuess = getElementAtIndex(guessHistory, guessIndex);
+
+    const guessDigits = separateCombinationDigits(latestGuess);
 
     // Scan the guess through the solution and return clue result(hit or blow)
     let clue = getClueFromGuess(guessDigits, solution);
 
-    // Serialize & update the on-chain clue
+    // Serialize the clue and update the on-chain clue history
     const serializedClue = serializeClue(clue);
-    this.serializedClue.set(serializedClue);
+    const clueHistory = deserializeCombinationHistory(
+      this.packedClueHistory.getAndRequireEquals()
+    );
+    const updatedClueHistory = updateElementAtIndex(
+      serializedClue,
+      clueHistory,
+      guessIndex
+    );
+
+    const serializedUpdatedClueHistory =
+      serializeCombinationHistory(updatedClueHistory);
+
+    this.packedClueHistory.set(serializedUpdatedClueHistory);
 
     // Check if the guess is correct & update the on-chain state
     let isSolvedThisTurn = checkIfSolved(clue).toField();

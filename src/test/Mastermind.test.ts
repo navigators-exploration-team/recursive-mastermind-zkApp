@@ -21,6 +21,8 @@ import {
   separateCombinationDigits,
   separateTurnCountAndMaxAttemptSolved,
   serializeClue,
+  serializeClueHistory,
+  serializeCombinationHistory,
 } from '../utils';
 
 import { StepProgram, StepProgramProof } from '../stepProgram';
@@ -728,9 +730,9 @@ describe('Mastermind ZkApp Tests', () => {
       );
 
       // All other fields should be 0
-      expect(zkapp.unseparatedGuess.get()).toEqual(Field(0));
+      expect(zkapp.packedGuessHistory.get()).toEqual(Field(0));
       expect(zkapp.codeBreakerId.get()).toEqual(Field(0));
-      expect(zkapp.serializedClue.get()).toEqual(Field(0));
+      expect(zkapp.packedClueHistory.get()).toEqual(Field(0));
 
       // Contract should be funded with the reward amount
       expect(Number(Mina.getBalance(zkappAddress).toBigInt())).toEqual(
@@ -846,12 +848,25 @@ describe('Mastermind ZkApp Tests', () => {
         Poseidon.hash(codeBreakerPubKey.toFields())
       );
 
-      expect(zkapp.unseparatedGuess.get()).toEqual(
-        compressCombinationDigits(secretCombination.map(Field))
+      const expectedGuessHistory = serializeCombinationHistory(
+        [[2, 1, 3, 4], secretCombination].map((digits) =>
+          compressCombinationDigits(digits.map(Field))
+        )
       );
 
-      const serializedClue = zkapp.serializedClue.get();
-      expect(serializedClue).toEqual(serializeClue([2, 2, 2, 2].map(Field)));
+      expect(zkapp.packedGuessHistory.get().toBigInt()).toEqual(
+        expectedGuessHistory.toBigInt()
+      );
+
+      const expectedClueHistory = serializeClueHistory(
+        [
+          [1, 1, 2, 2],
+          [2, 2, 2, 2],
+        ].map((digits) => serializeClue(digits.map(Field)))
+      );
+      expect(zkapp.packedClueHistory.get().toBigInt()).toEqual(
+        expectedClueHistory.toBigInt()
+      );
     });
 
     it('Reject submitting a same proof again', async () => {
@@ -917,7 +932,14 @@ describe('Mastermind ZkApp Tests', () => {
 
       await makeGuess(codeBreakerPubKey, codeBreakerKey, unseparatedGuess);
 
-      expect(zkapp.unseparatedGuess.get()).toEqual(unseparatedGuess);
+      const expectedGuessHistory = serializeCombinationHistory(
+        [[2, 1, 3, 4]].map((digits) =>
+          compressCombinationDigits(digits.map(Field))
+        )
+      );
+      expect(zkapp.packedGuessHistory.get().toBigInt()).toEqual(
+        expectedGuessHistory.toBigInt()
+      );
     });
 
     it('Intruder tries to give clue', async () => {
@@ -951,8 +973,12 @@ describe('Mastermind ZkApp Tests', () => {
         codeMasterSalt
       );
 
-      const serializedClue = zkapp.serializedClue.get();
-      expect(serializedClue).toEqual(serializeClue([1, 1, 2, 2].map(Field)));
+      const expectedClueHistory = serializeClueHistory(
+        [[1, 1, 2, 2]].map((digits) => serializeClue(digits.map(Field)))
+      );
+      expect(zkapp.packedClueHistory.get().toBigInt()).toEqual(
+        expectedClueHistory.toBigInt()
+      );
     });
 
     it('Intruder tries to make guess', async () => {
