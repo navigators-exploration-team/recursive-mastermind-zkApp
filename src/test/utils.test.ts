@@ -1,3 +1,4 @@
+import { StepProgram } from '../stepProgram';
 import {
   compressRewardAndFinalizeSlot,
   compressTurnCountMaxAttemptSolved,
@@ -15,8 +16,12 @@ import {
   serializeClueHistory,
   deserializeClueHistory,
 } from '../utils';
-
-import { Field, UInt32, UInt64 } from 'o1js';
+import {
+  generateTestProofs,
+  guessConfig1,
+  StepProgramCreateGame,
+} from './testUtils';
+import { Field, UInt32, UInt64, Poseidon, PrivateKey } from 'o1js';
 
 /*
  * Random combination generator function for utility function tests.
@@ -408,6 +413,147 @@ describe('Provable utilities - unit tests', () => {
 
         expect(shouldReject).toThrow('Invalid index: Index out of bounds!');
       });
+    });
+  });
+  describe('Should generate StepProgramProof for given parameters', () => {
+    let codeMasterKey: PrivateKey;
+    let codeBreakerKey: PrivateKey;
+    let codeMasterSalt: Field;
+
+    beforeAll(async () => {
+      codeBreakerKey = PrivateKey.random();
+      codeMasterKey = PrivateKey.random();
+      codeMasterSalt = Field.random();
+
+      await StepProgram.compile();
+    });
+
+    it('Should generate proofs and we shall obtain of codeMaster win.', async () => {
+      const round = 15;
+      const winnerFlag = 0;
+      const actions = guessConfig1;
+      const salt = codeMasterSalt;
+
+      const secretCombination = actions.secret;
+      const lastGameProof = await StepProgramCreateGame(
+        secretCombination,
+        salt,
+        codeMasterKey
+      );
+
+      const proof = await generateTestProofs(
+        round,
+        winnerFlag,
+        actions,
+        lastGameProof,
+        codeBreakerKey,
+        codeMasterKey,
+        salt
+      );
+
+      // Get outputted numbers and history
+      const outputNumbers = separateCombinationDigits(
+        proof.publicOutput.lastGuess
+      );
+
+      const history = deserializeCombinationHistory(
+        proof.publicOutput.packedGuessHistory
+      );
+      const separatedHistory = Array.from({ length: round }, (_, i) =>
+        separateCombinationDigits(history[i]).map(Number)
+      );
+      const attemptList = actions.totalAttempts.slice(0, round);
+
+      const computedHash = Poseidon.hash([...outputNumbers, salt]);
+      const solutionHash = proof.publicOutput.solutionHash;
+
+      expect(separatedHistory).toEqual(attemptList);
+      expect(solutionHash).not.toEqual(computedHash);
+      expect(outputNumbers.map(Number)).toEqual([8, 3, 5, 2]);
+    });
+
+    it('Should generate a game where codeBreaker wins', async () => {
+      const round = 7;
+      const winnerFlag = 1;
+      const actions = guessConfig1;
+      const salt = codeMasterSalt;
+
+      const secretCombination = actions.secret;
+      const lastGameProof = await StepProgramCreateGame(
+        secretCombination,
+        salt,
+        codeMasterKey
+      );
+
+      const proof = await generateTestProofs(
+        round,
+        winnerFlag,
+        actions,
+        lastGameProof,
+        codeBreakerKey,
+        codeMasterKey,
+        salt
+      );
+
+      const publicOutputs = proof.publicOutput;
+
+      const outputNumbers = separateCombinationDigits(publicOutputs.lastGuess);
+      const history = deserializeCombinationHistory(
+        publicOutputs.packedGuessHistory
+      );
+      const separatedHistory = Array.from({ length: round }, (_, i) =>
+        separateCombinationDigits(history[i]).map(Number)
+      );
+
+      // Getting until round - 1, since in proof generation first round - 1 elements are used before secret combination.
+      const attemptList = actions.totalAttempts.slice(0, round - 1);
+      attemptList.push(secretCombination);
+
+      const computedHash = Poseidon.hash([...outputNumbers, salt]);
+      const solutionHash = publicOutputs.solutionHash;
+
+      expect(separatedHistory).toEqual(attemptList);
+      expect(solutionHash).toEqual(computedHash);
+      expect(outputNumbers.map(Number)).toEqual([6, 3, 8, 4]);
+      expect(BigInt(round)).toEqual(
+        publicOutputs.turnCount.sub(1).div(2).toBigInt()
+      );
+    });
+    it('Should generate a proof that is not solved yet.', async () => {
+      const round = 7;
+      const winnerFlag = 2;
+      const actions = guessConfig1;
+      const salt = codeMasterSalt;
+
+      const secretCombination = actions.secret;
+      const lastGameProof = await StepProgramCreateGame(
+        secretCombination,
+        salt,
+        codeMasterKey
+      );
+
+      const proof = await generateTestProofs(
+        round,
+        winnerFlag,
+        actions,
+        lastGameProof,
+        codeBreakerKey,
+        codeMasterKey,
+        salt
+      );
+
+      const publicOutputs = proof.publicOutput;
+
+      const outputNumbers = separateCombinationDigits(publicOutputs.lastGuess);
+
+      const computedHash = Poseidon.hash([...outputNumbers, salt]);
+      const solutionHash = publicOutputs.solutionHash;
+
+      expect(solutionHash).not.toEqual(computedHash);
+
+      expect(BigInt(round)).toEqual(
+        publicOutputs.turnCount.sub(1).div(2).toBigInt()
+      );
     });
   });
 });
