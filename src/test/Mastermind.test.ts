@@ -37,7 +37,7 @@ import { players } from './mock';
 describe('Mastermind ZkApp Tests', () => {
   // Global variables
   let testEnvironment = 'local';
-  let logsEnabled = true;
+  let logsEnabled = false;
   const localTest = testEnvironment === 'local';
   let fee = localTest ? 0 : 1e9;
   let proofsEnabled = false;
@@ -994,13 +994,16 @@ describe('Mastermind ZkApp Tests', () => {
       await expect(guessTx()).rejects.toThrowError(expectedMsg);
     });
 
-    it(
-      'Claim reward successfully',
-      async () => {
-        await waitForFinalize();
-        await claimReward(codeMasterPubKey, codeMasterKey);
-      },
-      10 * 60 * 1000
-    );
+    // Skip this test on devnet due to long wait time
+    if (testEnvironment !== 'devnet') {
+      it(
+        'Claim reward successfully',
+        async () => {
+          await waitForFinalize();
+          await claimReward(codeMasterPubKey, codeMasterKey);
+        },
+        10 * 60 * 1000
+      );
+    }
   });
 });
