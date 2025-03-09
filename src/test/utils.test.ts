@@ -470,7 +470,6 @@ describe('Provable utilities - unit tests', () => {
 
       expect(separatedHistory).toEqual(attemptList);
       expect(solutionHash).not.toEqual(computedHash);
-      console.log(outputNumbers);
       expect(outputNumbers.map(Number)).toEqual([8, 3, 5, 2]);
     });
 
