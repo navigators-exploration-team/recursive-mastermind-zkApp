@@ -416,7 +416,7 @@ describe('Provable utilities - unit tests', () => {
       });
     });
   });
-  describe.only('Should generate StepProgramProof for given parameters', () => {
+  describe('Should generate StepProgramProof for given parameters', () => {
     let codeMasterKey: PrivateKey;
     let codeBreakerKey: PrivateKey;
     let codeMasterSalt: Field;
