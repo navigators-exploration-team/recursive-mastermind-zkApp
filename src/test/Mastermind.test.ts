@@ -9,6 +9,9 @@ import {
   Poseidon,
   UInt64,
   UInt32,
+  fetchAccount,
+  fetchLastBlock,
+  Lightnet,
 } from 'o1js';
 
 import {
@@ -18,6 +21,8 @@ import {
   separateCombinationDigits,
   separateTurnCountAndMaxAttemptSolved,
   serializeClue,
+  serializeClueHistory,
+  serializeCombinationHistory,
 } from '../utils';
 
 import { StepProgram, StepProgramProof } from '../stepProgram';
@@ -27,11 +32,30 @@ import {
   StepProgramGiveClue,
   StepProgramMakeGuess,
 } from './testUtils';
+import { players } from './mock';
 
 describe('Mastermind ZkApp Tests', () => {
   // Global variables
+  let testEnvironment = 'local';
+  let logsEnabled = true;
+  const localTest = testEnvironment === 'local';
+  let fee = localTest ? 0 : 1e9;
   let proofsEnabled = false;
   let REWARD_AMOUNT = 100000;
+  let MINA_NODE_ENDPOINT: string;
+  let MINA_ARCHIVE_ENDPOINT: string;
+  let MINA_EXPLORER: string;
+
+  if (testEnvironment === 'devnet') {
+    MINA_NODE_ENDPOINT = 'https://api.minascan.io/node/devnet/v1/graphql';
+    MINA_ARCHIVE_ENDPOINT = 'https://api.minascan.io/archive/devnet/v1/graphql';
+    MINA_EXPLORER = 'https://minascan.io/devnet/tx/';
+  } else if (testEnvironment === 'lightnet') {
+    MINA_NODE_ENDPOINT = 'http://127.0.0.1:8080/graphql';
+    MINA_ARCHIVE_ENDPOINT = 'http://127.0.0.1:8282';
+    MINA_EXPLORER =
+      'file:///Users/kadircan/.cache/zkapp-cli/lightnet/explorer/v0.2.2/index.html?target=block&numberOrHash=';
+  }
 
   // Keys
   let codeMasterKey: PrivateKey;
@@ -64,6 +88,59 @@ describe('Mastermind ZkApp Tests', () => {
   let Local: Awaited<ReturnType<typeof Mina.LocalBlockchain>>;
 
   // Helper functions
+  function log(...args: any[]) {
+    if (logsEnabled) {
+      console.log(...args);
+    }
+  }
+
+  /**
+   * Wait for a transaction to be included in a block and fetch the account.
+   * @param tx The transaction to wait for
+   * @param keys The keys to sign the transaction
+   * @param accountsToFetch The accounts to fetch after the transaction is included
+   */
+  async function waitTransactionAndFetchAccount(
+    tx: Awaited<ReturnType<typeof Mina.transaction>>,
+    keys: PrivateKey[],
+    accountsToFetch?: PublicKey[]
+  ) {
+    try {
+      log('proving and sending transaction');
+      await tx.prove();
+      const pendingTransaction = await tx.sign(keys).send();
+
+      log('waiting for transaction to be included in a block');
+      if (!localTest) {
+        log(`${MINA_EXPLORER}${pendingTransaction.hash}`);
+        const status = await pendingTransaction.safeWait();
+        if (status.status === 'rejected') {
+          log('Transaction rejected', JSON.stringify(status.errors));
+          throw new Error(
+            'Transaction was rejected: ' + JSON.stringify(status.errors)
+          );
+        }
+
+        if (accountsToFetch) {
+          await fetchAccounts(accountsToFetch);
+        }
+      }
+    } catch (error) {
+      log('error', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch given accounts from the Mina to local cache.
+   * @param accounts List of account public keys to fetch
+   */
+  async function fetchAccounts(accounts: PublicKey[]) {
+    if (localTest) return;
+    for (let account of accounts) {
+      await fetchAccount({ publicKey: account });
+    }
+  }
 
   /**
    * Deploy a fresh Mastermind ZkApp contract.
@@ -77,13 +154,19 @@ describe('Mastermind ZkApp Tests', () => {
     zkappPrivateKey: PrivateKey
   ) {
     const deployerAccount = deployerKey.toPublicKey();
-    const tx = await Mina.transaction(deployerAccount, async () => {
-      AccountUpdate.fundNewAccount(deployerAccount);
-      await zkapp.deploy();
-    });
+    const tx = await Mina.transaction(
+      { sender: deployerAccount, fee },
+      async () => {
+        AccountUpdate.fundNewAccount(deployerAccount);
+        await zkapp.deploy();
+      }
+    );
 
-    await tx.prove();
-    await tx.sign([deployerKey, zkappPrivateKey]).send();
+    await waitTransactionAndFetchAccount(
+      tx,
+      [deployerKey, zkappPrivateKey],
+      [zkappAddress]
+    );
   }
 
   /**
@@ -109,18 +192,58 @@ describe('Mastermind ZkApp Tests', () => {
     const unseparatedCombination = compressCombinationDigits(
       secretCombination.map(Field)
     );
-    const initTx = await Mina.transaction(deployerAccount, async () => {
-      await zkapp.initGame(
-        unseparatedCombination,
-        salt,
-        Field.from(maxAttempt),
-        refereeAccount,
-        UInt64.from(REWARD_AMOUNT)
-      );
-    });
+    const initTx = await Mina.transaction(
+      { sender: deployerAccount, fee },
+      async () => {
+        await zkapp.initGame(
+          unseparatedCombination,
+          salt,
+          Field.from(maxAttempt),
+          refereeAccount,
+          UInt64.from(REWARD_AMOUNT)
+        );
+      }
+    );
 
-    await initTx.prove();
-    await initTx.sign([deployerKey]).send();
+    await waitTransactionAndFetchAccount(initTx, [deployerKey], [zkappAddress]);
+  }
+
+  /**
+   * Helper function to expect initializeGame to fail.
+   */
+  async function expectInitializeGameToFail(
+    zkapp: MastermindZkApp,
+    deployerKey: PrivateKey,
+    secretCombination: number[],
+    salt: Field,
+    maxAttempt: number,
+    refereeKey: PrivateKey,
+    expectedMsg?: string
+  ) {
+    const deployerAccount = deployerKey.toPublicKey();
+    const refereeAccount = refereeKey.toPublicKey();
+
+    const unseparatedCombination = compressCombinationDigits(
+      secretCombination.map(Field)
+    );
+    try {
+      const tx = await Mina.transaction(
+        { sender: deployerAccount, fee },
+        async () => {
+          await zkapp.initGame(
+            unseparatedCombination,
+            salt,
+            Field.from(maxAttempt),
+            refereeAccount,
+            UInt64.from(REWARD_AMOUNT)
+          );
+        }
+      );
+      await waitTransactionAndFetchAccount(tx, [deployerKey]);
+    } catch (error: any) {
+      log(error);
+      expect(error.message).toContain(expectedMsg);
+    }
   }
 
   /**
@@ -149,20 +272,26 @@ describe('Mastermind ZkApp Tests', () => {
       secretCombination.map(Field)
     );
 
-    const tx = await Mina.transaction(deployerAccount, async () => {
-      AccountUpdate.fundNewAccount(deployerAccount);
-      await zkapp.deploy();
-      await zkapp.initGame(
-        unseparatedCombination,
-        salt,
-        Field.from(maxAttempt),
-        refereeAccount,
-        UInt64.from(REWARD_AMOUNT)
-      );
-    });
+    const tx = await Mina.transaction(
+      { sender: deployerAccount, fee },
+      async () => {
+        AccountUpdate.fundNewAccount(deployerAccount);
+        await zkapp.deploy();
+        await zkapp.initGame(
+          unseparatedCombination,
+          salt,
+          Field.from(maxAttempt),
+          refereeAccount,
+          UInt64.from(REWARD_AMOUNT)
+        );
+      }
+    );
 
-    await tx.prove();
-    await tx.sign([deployerKey, zkappPrivateKey]).send();
+    await waitTransactionAndFetchAccount(
+      tx,
+      [deployerKey, zkappPrivateKey],
+      [zkappAddress, deployerAccount]
+    );
   }
 
   /**
@@ -183,7 +312,7 @@ describe('Mastermind ZkApp Tests', () => {
       refereeKey
     );
 
-    await acceptGame();
+    await acceptGame(codeBreakerPubKey, codeBreakerKey);
   }
 
   /**
@@ -193,16 +322,19 @@ describe('Mastermind ZkApp Tests', () => {
     proof: StepProgramProof,
     expectedMsg?: string
   ) {
-    const submitGameProofTx = async () => {
-      const tx = await Mina.transaction(codeMasterPubKey, async () => {
-        await zkapp.submitGameProof(proof);
-      });
+    try {
+      const tx = await Mina.transaction(
+        { sender: codeMasterPubKey, fee },
+        async () => {
+          await zkapp.submitGameProof(proof);
+        }
+      );
 
-      await tx.prove();
-      await tx.sign([codeMasterKey]).send();
-    };
-
-    await expect(submitGameProofTx()).rejects.toThrowError(expectedMsg);
+      await waitTransactionAndFetchAccount(tx, [codeMasterKey]);
+    } catch (error: any) {
+      log(error);
+      expect(error.message).toContain(expectedMsg);
+    }
   }
 
   /**
@@ -210,27 +342,37 @@ describe('Mastermind ZkApp Tests', () => {
    */
   async function submitGameProof(proof: StepProgramProof) {
     const submitGameProofTx = await Mina.transaction(
-      codeBreakerKey.toPublicKey(),
+      { sender: codeBreakerKey.toPublicKey(), fee },
       async () => {
         await zkapp.submitGameProof(proof);
       }
     );
 
-    await submitGameProofTx.prove();
-    await submitGameProofTx.sign([codeBreakerKey]).send();
+    await waitTransactionAndFetchAccount(
+      submitGameProofTx,
+      [codeBreakerKey],
+      [zkappAddress]
+    );
   }
 
   /**
    * Helper function to claim reward from codeBreaker or codeMaster.
    */
   async function claimReward(claimer: PublicKey, claimerKey: PrivateKey) {
+    await fetchAccounts([claimer, zkappAddress]);
     const claimerBalance = Mina.getBalance(claimer);
-    const claimRewardTx = await Mina.transaction(claimer, async () => {
-      await zkapp.claimReward();
-    });
+    const claimRewardTx = await Mina.transaction(
+      { sender: claimer, fee },
+      async () => {
+        await zkapp.claimReward();
+      }
+    );
 
-    await claimRewardTx.prove();
-    await claimRewardTx.sign([claimerKey]).send();
+    await waitTransactionAndFetchAccount(
+      claimRewardTx,
+      [claimerKey],
+      [zkappAddress, claimer]
+    );
 
     const contractBalance = Mina.getBalance(zkappAddress);
     expect(Number(contractBalance.toBigInt())).toEqual(0);
@@ -238,7 +380,7 @@ describe('Mastermind ZkApp Tests', () => {
     const claimerNewBalance = Mina.getBalance(claimer);
     expect(
       Number(claimerNewBalance.toBigInt() - claimerBalance.toBigInt())
-    ).toEqual(2 * REWARD_AMOUNT);
+    ).toEqual(2 * REWARD_AMOUNT - (localTest ? 0 : fee));
   }
 
   /**
@@ -249,28 +391,90 @@ describe('Mastermind ZkApp Tests', () => {
     claimerKey: PrivateKey,
     expectedMsg?: string
   ) {
-    const claimRewardTx = async () => {
-      const tx = await Mina.transaction(claimer, async () => {
+    try {
+      await fetchAccounts([claimer, zkappAddress]);
+      const tx = await Mina.transaction({ sender: claimer, fee }, async () => {
         await zkapp.claimReward();
       });
 
-      await tx.prove();
-      await tx.sign([claimerKey]).send();
-    };
-
-    await expect(claimRewardTx()).rejects.toThrowError(expectedMsg);
+      await waitTransactionAndFetchAccount(tx, [claimerKey]);
+    } catch (error: any) {
+      log(error);
+      expect(error.message).toContain(expectedMsg);
+    }
   }
 
   /**
-   * Helper function to accept a game from the codeBreaker.
+   * Helper function to accept a game from player.
    */
-  async function acceptGame() {
-    const acceptGameTx = await Mina.transaction(codeBreakerPubKey, async () => {
-      await zkapp.acceptGame();
+  async function acceptGame(player: PublicKey, playerKey: PrivateKey) {
+    const acceptGameTx = await Mina.transaction(
+      { sender: player, fee },
+      async () => {
+        await zkapp.acceptGame();
+      }
+    );
+
+    await waitTransactionAndFetchAccount(
+      acceptGameTx,
+      [playerKey],
+      [zkappAddress, player]
+    );
+  }
+
+  /**
+   * Helper function to expect accept game to fail
+   */
+  async function expectAcceptGameToFail(
+    player: PublicKey,
+    playerKey: PrivateKey,
+    expectedMsg?: string
+  ) {
+    try {
+      const tx = await Mina.transaction({ sender: player, fee }, async () => {
+        await zkapp.acceptGame();
+      });
+      await waitTransactionAndFetchAccount(tx, [playerKey]);
+    } catch (error: any) {
+      log(error);
+      expect(error.message).toContain(expectedMsg);
+    }
+  }
+
+  /**
+   * Helper function to make a guess.
+   */
+  async function makeGuess(
+    player: PublicKey,
+    playerKey: PrivateKey,
+    unseparatedGuess: Field
+  ) {
+    await fetchAccounts([zkappAddress]);
+    const guessTx = await Mina.transaction(
+      { sender: player, fee },
+      async () => {
+        await zkapp.makeGuess(unseparatedGuess);
+      }
+    );
+
+    await waitTransactionAndFetchAccount(guessTx, [playerKey], [zkappAddress]);
+  }
+
+  /**
+   * Helper function to give a clue.
+   */
+  async function giveClue(
+    player: PublicKey,
+    playerKey: PrivateKey,
+    unseparatedCombination: Field,
+    salt: Field
+  ) {
+    await fetchAccounts([zkappAddress]);
+    const clueTx = await Mina.transaction({ sender: player, fee }, async () => {
+      await zkapp.giveClue(unseparatedCombination, salt);
     });
 
-    await acceptGameTx.prove();
-    await acceptGameTx.sign([codeBreakerKey]).send();
+    await waitTransactionAndFetchAccount(clueTx, [playerKey], [zkappAddress]);
   }
 
   /**
@@ -281,13 +485,20 @@ describe('Mastermind ZkApp Tests', () => {
     playerPubKey: PublicKey
   ) {
     const refereePubKey = refereeKey.toPublicKey();
+    await fetchAccounts([playerPubKey, zkappAddress]);
     const playerPrevBalance = Mina.getBalance(playerPubKey);
-    const penaltyTx = await Mina.transaction(refereePubKey, async () => {
-      await zkapp.forfeitWin(playerPubKey);
-    });
+    const penaltyTx = await Mina.transaction(
+      { sender: refereePubKey, fee },
+      async () => {
+        await zkapp.forfeitWin(playerPubKey);
+      }
+    );
 
-    await penaltyTx.prove();
-    await penaltyTx.sign([refereeKey]).send();
+    await waitTransactionAndFetchAccount(
+      penaltyTx,
+      [refereeKey],
+      [zkappAddress, playerPubKey]
+    );
 
     const contractBalance = Mina.getBalance(zkappAddress);
     expect(Number(contractBalance.toBigInt())).toEqual(0);
@@ -298,27 +509,109 @@ describe('Mastermind ZkApp Tests', () => {
     ).toEqual(2 * REWARD_AMOUNT);
   }
 
+  /**
+   * Helper function to fetch the latest block and return the global slot
+   */
+  async function getGlobalSlot() {
+    const latestBlock = await fetchLastBlock(MINA_NODE_ENDPOINT);
+
+    return latestBlock.globalSlotSinceGenesis.toBigint();
+  }
+
+  /**
+   * Helper function to wait for SLOT_DURATION.
+   */
+  async function waitForFinalize() {
+    if (localTest) {
+      // Move the global slot forward
+      Local.incrementGlobalSlot(GAME_DURATION);
+    } else {
+      // Wait for the game duration
+      await fetchAccount({ publicKey: zkappAddress });
+      let finalizeSlot = zkapp.rewardFinalizeSlot.get();
+      while (true) {
+        let currentSlot = await getGlobalSlot();
+        if (currentSlot >= finalizeSlot.toBigInt()) {
+          break;
+        }
+
+        // Wait for 3 min
+        await new Promise((resolve) => setTimeout(resolve, 3 * 60 * 1000));
+        await fetchLastBlock(MINA_NODE_ENDPOINT);
+      }
+    }
+  }
+
   beforeAll(async () => {
     // Compile StepProgram and MastermindZkApp
-    await StepProgram.compile();
-    await MastermindZkApp.compile();
+    await StepProgram.compile({
+      // proofsEnabled,
+    });
+    if (testEnvironment !== 'local') {
+      await MastermindZkApp.compile();
+    }
 
-    // Set up the Mina local blockchain
-    Local = await Mina.LocalBlockchain({ proofsEnabled });
-    Mina.setActiveInstance(Local);
+    if (testEnvironment === 'local') {
+      // Set up the Mina local blockchain
+      Local = await Mina.LocalBlockchain({ proofsEnabled });
+      Mina.setActiveInstance(Local);
 
-    // Assign local test accounts
-    codeMasterKey = Local.testAccounts[0].key;
-    codeMasterPubKey = codeMasterKey.toPublicKey();
+      // Assign local test accounts
+      codeMasterKey = Local.testAccounts[0].key;
+      codeMasterPubKey = codeMasterKey.toPublicKey();
 
-    codeBreakerKey = Local.testAccounts[1].key;
-    codeBreakerPubKey = codeBreakerKey.toPublicKey();
+      codeBreakerKey = Local.testAccounts[1].key;
+      codeBreakerPubKey = codeBreakerKey.toPublicKey();
 
-    intruderKey = Local.testAccounts[2].key;
-    intruderPubKey = intruderKey.toPublicKey();
+      intruderKey = Local.testAccounts[2].key;
+      intruderPubKey = intruderKey.toPublicKey();
 
-    refereeKey = Local.testAccounts[3].key;
-    refereePubKey = refereeKey.toPublicKey();
+      refereeKey = Local.testAccounts[3].key;
+      refereePubKey = refereeKey.toPublicKey();
+    } else if (testEnvironment === 'devnet') {
+      // Set up the Mina devnet
+      const Network = Mina.Network({
+        mina: MINA_NODE_ENDPOINT,
+        archive: MINA_ARCHIVE_ENDPOINT,
+      });
+
+      Mina.setActiveInstance(Network);
+
+      // Assign devnet test accounts
+      codeMasterKey = players[0][0];
+      codeMasterPubKey = players[0][1];
+
+      codeBreakerKey = players[1][0];
+      codeBreakerPubKey = players[1][1];
+
+      intruderKey = players[2][0];
+      intruderPubKey = players[2][1];
+
+      refereeKey = players[3][0];
+      refereePubKey = players[3][1];
+    } else if (testEnvironment === 'lightnet') {
+      // Set up the Mina lightnet
+      const Network = Mina.Network({
+        mina: MINA_NODE_ENDPOINT,
+        archive: MINA_ARCHIVE_ENDPOINT,
+        lightnetAccountManager: 'http://127.0.0.1:8181',
+      });
+
+      Mina.setActiveInstance(Network);
+
+      // Assign lightnet test accounts
+      codeMasterKey = (await Lightnet.acquireKeyPair()).privateKey;
+      codeMasterPubKey = codeMasterKey.toPublicKey();
+
+      codeBreakerKey = (await Lightnet.acquireKeyPair()).privateKey;
+      codeBreakerPubKey = codeBreakerKey.toPublicKey();
+
+      intruderKey = (await Lightnet.acquireKeyPair()).privateKey;
+      intruderPubKey = intruderKey.toPublicKey();
+
+      refereeKey = (await Lightnet.acquireKeyPair()).privateKey;
+      refereePubKey = refereeKey.toPublicKey();
+    }
 
     // Initialize codeMasterSalt & secret combination
     codeMasterSalt = Field.random();
@@ -355,13 +648,21 @@ describe('Mastermind ZkApp Tests', () => {
   });
 
   describe('Deploy & Initialize Flow', () => {
+    beforeEach(() => {
+      log(expect.getState().currentTestName);
+    });
+
     it('Deploy a Mastermind zkApp', async () => {
       await deployZkApp(zkapp, codeMasterKey, zkappPrivateKey);
     });
 
     it('Reject calling acceptGame method before initGame', async () => {
       const expectedMsg = 'The game has not been initialized yet!';
-      await expect(zkapp.acceptGame()).rejects.toThrowError(expectedMsg);
+      await expectAcceptGameToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        expectedMsg
+      );
     });
 
     it('Reject calling submitGameProof method before initGame', async () => {
@@ -370,33 +671,29 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Rejects initGame if maxAttempts > 15', async () => {
-      const initTx = async () =>
-        await initializeGame(
-          zkapp,
-          codeMasterKey,
-          secretCombination,
-          codeMasterSalt,
-          20,
-          refereeKey
-        );
-
       const expectedMsg = 'The maximum number of attempts allowed is 15!';
-      await expect(initTx()).rejects.toThrowError(expectedMsg);
+      await expectInitializeGameToFail(
+        zkapp,
+        codeMasterKey,
+        secretCombination,
+        codeMasterSalt,
+        20,
+        refereeKey,
+        expectedMsg
+      );
     });
 
     it('Rejects initGame if maxAttempts < 5', async () => {
-      const initTx = async () =>
-        await initializeGame(
-          zkapp,
-          codeMasterKey,
-          secretCombination,
-          codeMasterSalt,
-          4,
-          refereeKey
-        );
-
       const expectedMsg = 'The minimum number of attempts allowed is 5!';
-      await expect(initTx()).rejects.toThrowError(expectedMsg);
+      await expectInitializeGameToFail(
+        zkapp,
+        codeMasterKey,
+        secretCombination,
+        codeMasterSalt,
+        4,
+        refereeKey,
+        expectedMsg
+      );
     });
 
     it('Initializes the game successfully', async () => {
@@ -433,9 +730,9 @@ describe('Mastermind ZkApp Tests', () => {
       );
 
       // All other fields should be 0
-      expect(zkapp.unseparatedGuess.get()).toEqual(Field(0));
+      expect(zkapp.packedGuessHistory.get()).toEqual(Field(0));
       expect(zkapp.codeBreakerId.get()).toEqual(Field(0));
-      expect(zkapp.serializedClue.get()).toEqual(Field(0));
+      expect(zkapp.packedClueHistory.get()).toEqual(Field(0));
 
       // Contract should be funded with the reward amount
       expect(Number(Mina.getBalance(zkappAddress).toBigInt())).toEqual(
@@ -445,6 +742,10 @@ describe('Mastermind ZkApp Tests', () => {
   });
 
   describe('Accepting a Game', () => {
+    beforeEach(() => {
+      log(expect.getState().currentTestName);
+    });
+
     it('Rejects submitGameProof before acceptGame', async () => {
       const expectedMsg =
         'The game has not been accepted by the codeBreaker yet!';
@@ -452,12 +753,7 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Accept the game successfully', async () => {
-      const tx = await Mina.transaction(codeBreakerPubKey, async () => {
-        await zkapp.acceptGame();
-      });
-
-      await tx.prove();
-      await tx.sign([codeBreakerKey]).send();
+      await acceptGame(codeBreakerPubKey, codeBreakerKey);
 
       const codeBreakerId = zkapp.codeBreakerId.get();
       expect(codeBreakerId).toEqual(codeBreakerId);
@@ -466,16 +762,11 @@ describe('Mastermind ZkApp Tests', () => {
     it('Reject accepting the game again', async () => {
       const expectedMsg =
         'The game has already been accepted by the codeBreaker!';
-      const acceptGameTx = async () => {
-        const tx = await Mina.transaction(codeBreakerPubKey, async () => {
-          await zkapp.acceptGame();
-        });
-
-        await tx.prove();
-        await tx.sign([codeBreakerKey]).send();
-      };
-
-      await expect(acceptGameTx()).rejects.toThrowError(expectedMsg);
+      await expectAcceptGameToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        expectedMsg
+      );
     });
 
     it('Reject submitting a proof with wrong secret', async () => {
@@ -484,8 +775,8 @@ describe('Mastermind ZkApp Tests', () => {
       await expectProofSubmissionToFail(wrongProof, expectedMsg);
     });
 
-    it('Reject claiming reward before finalizing', async () => {
-      const expectedMsg = 'The game has not been finalized yet!';
+    it('Reject claiming reward before solving', async () => {
+      const expectedMsg = 'You are not the winner of this game!';
       await expectClaimRewardToFail(
         codeBreakerPubKey,
         codeBreakerKey,
@@ -537,6 +828,10 @@ describe('Mastermind ZkApp Tests', () => {
       );
     });
 
+    beforeEach(() => {
+      log(expect.getState().currentTestName);
+    });
+
     it('Submit with correct game proof', async () => {
       await submitGameProof(completedProof);
 
@@ -553,29 +848,30 @@ describe('Mastermind ZkApp Tests', () => {
         Poseidon.hash(codeBreakerPubKey.toFields())
       );
 
-      expect(zkapp.unseparatedGuess.get()).toEqual(
-        compressCombinationDigits(secretCombination.map(Field))
+      const expectedGuessHistory = serializeCombinationHistory(
+        [[2, 1, 3, 4], secretCombination].map((digits) =>
+          compressCombinationDigits(digits.map(Field))
+        )
       );
 
-      const serializedClue = zkapp.serializedClue.get();
-      expect(serializedClue).toEqual(serializeClue([2, 2, 2, 2].map(Field)));
+      expect(zkapp.packedGuessHistory.get().toBigInt()).toEqual(
+        expectedGuessHistory.toBigInt()
+      );
+
+      const expectedClueHistory = serializeClueHistory(
+        [
+          [1, 1, 2, 2],
+          [2, 2, 2, 2],
+        ].map((digits) => serializeClue(digits.map(Field)))
+      );
+      expect(zkapp.packedClueHistory.get().toBigInt()).toEqual(
+        expectedClueHistory.toBigInt()
+      );
     });
 
     it('Reject submitting a same proof again', async () => {
       const expectedMsg = 'The game secret has already been solved!';
       await expectProofSubmissionToFail(completedProof, expectedMsg);
-    });
-
-    it('Reject claiming reward before game finalized', async () => {
-      const expectedMsg = 'The game has not been finalized yet!';
-      await expectClaimRewardToFail(
-        codeBreakerPubKey,
-        codeBreakerKey,
-        expectedMsg
-      );
-
-      // Move the global slot forward
-      Local.incrementGlobalSlot(GAME_DURATION);
     });
 
     it('Rejects reward claim from intruder', async () => {
@@ -601,9 +897,10 @@ describe('Mastermind ZkApp Tests', () => {
   describe('Code Breaker punished for timeout', () => {
     beforeAll(async () => {
       await prepareNewGame();
-    });
+    }, 10 * 60 * 1000);
 
-    it('penalty for codeBreaker', async () => {
+    it('Penalty for codeBreaker', async () => {
+      log('Penalty for codeBreaker');
       await forfeitWinForPlayer(refereeKey, codeMasterPubKey);
     });
   });
@@ -611,9 +908,10 @@ describe('Mastermind ZkApp Tests', () => {
   describe('Code Master punished for timeout', () => {
     beforeAll(async () => {
       await prepareNewGame();
-    });
+    }, 10 * 60 * 1000);
 
     it('penalty for codeMaster', async () => {
+      log('Penalty for codeMaster');
       await forfeitWinForPlayer(refereeKey, codeBreakerPubKey);
     });
   });
@@ -621,6 +919,10 @@ describe('Mastermind ZkApp Tests', () => {
   describe('Code Master wins', () => {
     beforeAll(async () => {
       await prepareNewGame();
+    }, 10 * 60 * 1000);
+
+    beforeEach(() => {
+      log(expect.getState().currentTestName);
     });
 
     it('makeGuess method', async () => {
@@ -628,14 +930,16 @@ describe('Mastermind ZkApp Tests', () => {
         [2, 1, 3, 4].map(Field)
       );
 
-      const guessTx = await Mina.transaction(codeBreakerPubKey, async () => {
-        await zkapp.makeGuess(unseparatedGuess);
-      });
+      await makeGuess(codeBreakerPubKey, codeBreakerKey, unseparatedGuess);
 
-      await guessTx.prove();
-      await guessTx.sign([codeBreakerKey]).send();
-
-      expect(zkapp.unseparatedGuess.get()).toEqual(unseparatedGuess);
+      const expectedGuessHistory = serializeCombinationHistory(
+        [[2, 1, 3, 4]].map((digits) =>
+          compressCombinationDigits(digits.map(Field))
+        )
+      );
+      expect(zkapp.packedGuessHistory.get().toBigInt()).toEqual(
+        expectedGuessHistory.toBigInt()
+      );
     });
 
     it('Intruder tries to give clue', async () => {
@@ -644,12 +948,12 @@ describe('Mastermind ZkApp Tests', () => {
       );
 
       const giveClueTx = async () => {
-        const tx = await Mina.transaction(intruderPubKey, async () => {
-          await zkapp.giveClue(unseparatedCombination, codeMasterSalt);
-        });
-
-        await tx.prove();
-        await tx.sign([intruderKey]).send();
+        await giveClue(
+          intruderPubKey,
+          intruderKey,
+          unseparatedCombination,
+          codeMasterSalt
+        );
       };
 
       const expectedMsg =
@@ -662,15 +966,19 @@ describe('Mastermind ZkApp Tests', () => {
         [1, 2, 3, 4].map(Field)
       );
 
-      const clueTx = await Mina.transaction(codeMasterPubKey, async () => {
-        await zkapp.giveClue(unseparatedCombination, codeMasterSalt);
-      });
+      await giveClue(
+        codeMasterPubKey,
+        codeMasterKey,
+        unseparatedCombination,
+        codeMasterSalt
+      );
 
-      await clueTx.prove();
-      await clueTx.sign([codeMasterKey]).send();
-
-      const serializedClue = zkapp.serializedClue.get();
-      expect(serializedClue).toEqual(serializeClue([1, 1, 2, 2].map(Field)));
+      const expectedClueHistory = serializeClueHistory(
+        [[1, 1, 2, 2]].map((digits) => serializeClue(digits.map(Field)))
+      );
+      expect(zkapp.packedClueHistory.get().toBigInt()).toEqual(
+        expectedClueHistory.toBigInt()
+      );
     });
 
     it('Intruder tries to make guess', async () => {
@@ -679,21 +987,20 @@ describe('Mastermind ZkApp Tests', () => {
       );
 
       const guessTx = async () => {
-        const tx = await Mina.transaction(intruderPubKey, async () => {
-          await zkapp.makeGuess(unseparatedGuess);
-        });
-
-        await tx.prove();
-        await tx.sign([intruderKey]).send();
+        await makeGuess(intruderPubKey, intruderKey, unseparatedGuess);
       };
 
       const expectedMsg = 'You are not the codeBreaker of this game!';
       await expect(guessTx()).rejects.toThrowError(expectedMsg);
     });
 
-    it('Claim reward successfully', async () => {
-      Local.incrementGlobalSlot(GAME_DURATION);
-      await claimReward(codeMasterPubKey, codeMasterKey);
-    });
+    it(
+      'Claim reward successfully',
+      async () => {
+        await waitForFinalize();
+        await claimReward(codeMasterPubKey, codeMasterKey);
+      },
+      10 * 60 * 1000
+    );
   });
 });

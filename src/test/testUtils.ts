@@ -2,10 +2,19 @@ import { Field, PrivateKey, Signature } from 'o1js';
 import { compressCombinationDigits } from '../utils';
 import { StepProgram, StepProgramProof } from '../stepProgram';
 
+export {
+  StepProgramCreateGame,
+  StepProgramGiveClue,
+  StepProgramMakeGuess,
+  generateTestProofs,
+  secretCombination,
+  gameGuesses,
+};
+
 /**
  * Creates a new game and returns the resulting proof.
  */
-export const StepProgramCreateGame = async (
+const StepProgramCreateGame = async (
   secret: number[],
   salt: Field,
   codeMasterKey: PrivateKey
@@ -26,7 +35,7 @@ export const StepProgramCreateGame = async (
 /**
  * Makes a guess and returns the updated proof.
  */
-export const StepProgramMakeGuess = async (
+const StepProgramMakeGuess = async (
   prevProof: StepProgramProof,
   guess: number[],
   codeBreakerKey: PrivateKey
@@ -49,7 +58,7 @@ export const StepProgramMakeGuess = async (
 /**
  * Gives a clue and returns the updated proof.
  */
-export const StepProgramGiveClue = async (
+const StepProgramGiveClue = async (
   prevProof: StepProgramProof,
   combination: number[],
   salt: Field,
@@ -87,99 +96,198 @@ function generateRandomNumber(): number {
  * The array is intended to be used as a guess in the game.
  * @returns - An array of four randomly generated numbers.
  */
-function generateRandomGuess(): number[] {
+function generateRandomGuess(secret: number[]): number[] {
   const numbers = new Set<number>();
 
   while (numbers.size < 4) {
     numbers.add(generateRandomNumber());
   }
+  let output = Array.from(numbers);
 
-  return Array.from(numbers);
+  if (output === secret) {
+    return generateRandomGuess(secret);
+  }
+
+  return output;
 }
 
 /**
- * In this function, guesses are obtained from a predefined list of actions.
- * @param winnerFlag - A flag that determines the outcome of the function: `0` produces results on behalf of the codeMaster, `1` for the codeBreaker, and `2` for an unsolved game case.
- * @param actions - A predetermined list of number sequences that can represent guesses or solutions. These are used to simulate guesses.
- * @param round - The number of rounds to be simulated. In each round, both `.makeGuess()` and `.giveClue()` methods are executed; hence, one round consists of two consecutive turns.
- * @param lastProof - The `StepProgramProof` instance that initiates the recursive proof generation process.
- * @param codeBreakerKey - The private key of the codeBreaker, used for signature creation.
- * @param codeMasterKey - The private key of the codeMaster, used for signature creation.
- * @param salt - The salt used in the hash function to prevent pre-image attacks.
- * @param secretCombination - The secret combination of the game, specified by the codeMaster.
- * @returns - A `StepProgramProof` instance.
+ * Generates a sequence of recursive proofs by making random guesses and receiving clues for a given number of rounds.
+ * @param rounds - The number of rounds to simulate the game.
+ * @param lastProof - An instance of game creation proof.
+ * @param salt -  The salt to be used in the hash function to prevent pre-image attacks.
+ * @param codeBreakerKey - The key to be used for signing codeBreaker related actions.
+ * @param codeMasterKey  The key to be used for signing codeMaster's actions.
+ * @returns {StepProgramProof}
  */
-export const generateTestProofs = async (
-  round: number,
-  winnerFlag: number,
-  actions: typeof guessConfig1,
+async function generateRecursiveRandomProof(
+  rounds: number,
   lastProof: StepProgramProof,
+  salt: Field,
+  secret: number[],
   codeBreakerKey: PrivateKey,
-  codeMasterKey: PrivateKey,
-  salt: Field
-): Promise<StepProgramProof> => {
-  const secretCombination = actions.secret;
-  const guesses = actions.totalAttempts;
+  codeMasterKey: PrivateKey
+): Promise<StepProgramProof> {
+  let guess;
+  for (let i = 0; i < rounds; i++) {
+    guess = generateRandomGuess(secret);
 
-  if (winnerFlag == 0) {
-    for (let i = 0; i < round; i++) {
-      const guess = guesses[i];
-
-      lastProof = await StepProgramMakeGuess(lastProof, guess, codeBreakerKey);
-
-      lastProof = await StepProgramGiveClue(
-        lastProof,
-        secretCombination,
-        salt,
-        codeMasterKey
-      );
-    }
-
-    return lastProof;
-  } else if (winnerFlag == 1) {
-    for (let i = 0; i < round - 1; i++) {
-      const guess = guesses[i];
-
-      lastProof = await StepProgramMakeGuess(lastProof, guess, codeBreakerKey);
-
-      lastProof = await StepProgramGiveClue(
-        lastProof,
-        secretCombination,
-        salt,
-        codeMasterKey
-      );
-    }
-
-    lastProof = await StepProgramMakeGuess(
-      lastProof,
-      secretCombination,
-      codeBreakerKey
-    );
+    lastProof = await StepProgramMakeGuess(lastProof, guess, codeBreakerKey);
 
     lastProof = await StepProgramGiveClue(
       lastProof,
-      secretCombination,
+      secret,
       salt,
       codeMasterKey
     );
+  }
+  return lastProof;
+}
 
+/**
+ * Generates a sequence of recursive proofs by making guesses taken from a predetermined list and receiving clues for a given number of rounds.
+ * @param rounds - The number of rounds to simulate the game.
+ * @param lastProof - An instance of game creation proof.
+ * @param salt -  The salt to be used in the hash function to prevent pre-image attacks.
+ * @param codeBreakerKey - The key to be used for signing codeBreaker related actions.
+ * @param codeMasterKey  The key to be used for signing codeMaster's actions.
+ * @returns {StepProgramProof}
+ */
+async function generateRecursiveGuessProof(
+  rounds: number,
+  lastProof: StepProgramProof,
+  salt: Field,
+  secret: number[],
+  codeBreakerKey: PrivateKey,
+  codeMasterKey: PrivateKey
+): Promise<StepProgramProof> {
+  let guess;
+  const guesses = gameGuesses.totalAttempts;
+
+  const isSecretIncluded = gameGuesses.totalAttempts.some(
+    (guess) => guess.toString() === secret.toString()
+  );
+
+  if (isSecretIncluded) {
+    throw new Error("Game secret can't be included in guesses!");
+  }
+
+  for (let i = 0; i < rounds; i++) {
+    guess = guesses[i];
+
+    lastProof = await StepProgramMakeGuess(lastProof, guess, codeBreakerKey);
+
+    lastProof = await StepProgramGiveClue(
+      lastProof,
+      secret,
+      salt,
+      codeMasterKey
+    );
+  }
+
+  return lastProof;
+}
+
+/**
+ * Simulates the recursive game steps and generates a {StepProgramProof} based on the given outcome and game state.
+ * @param flag - A flag to determine the output state of the game.
+ * @param rounds - The number of rounds to simulate.
+ * @param salt - The salt to be used in the hash function to prevent pre-image attacks.
+ * @param codeBreakerKey - The key to be used for signing codeBreaker related actions.
+ * @param codeMasterKey - The key to be used for signing codeBreaker related actions.
+ * @param guesses - An optional list of predefined actions that codeBreaker can use.
+ * @returns {StepProgramProof}
+ */
+const generateTestProofs = async (
+  flag: string,
+  rounds: number,
+  salt: Field,
+  secret: number[],
+  codeBreakerKey: PrivateKey,
+  codeMasterKey: PrivateKey,
+  guesses?: typeof gameGuesses
+): Promise<StepProgramProof> => {
+  let lastProof = await StepProgramCreateGame(secret, salt, codeMasterKey);
+
+  if (flag === 'codemaster-victory') {
+    lastProof =
+      guesses === undefined
+        ? await generateRecursiveRandomProof(
+            rounds,
+            lastProof,
+            salt,
+            secret,
+            codeBreakerKey,
+            codeMasterKey
+          )
+        : await generateRecursiveGuessProof(
+            rounds,
+            lastProof,
+            salt,
+            secret,
+            codeBreakerKey,
+            codeMasterKey
+          );
     return lastProof;
-  } else if (winnerFlag == 2) {
-    for (let i = 0; i < round; i++) {
-      let guess = generateRandomGuess();
-
-      lastProof = await StepProgramMakeGuess(lastProof, guess, codeBreakerKey);
-
-      lastProof = await StepProgramGiveClue(
-        lastProof,
-        secretCombination,
-        salt,
-        codeMasterKey
+  } else if (flag === 'codebreaker-victory') {
+    if (rounds > 15)
+      throw new Error(
+        "Maximum attempts for codebreaker victory case can't be more than 15!"
       );
-    }
+
+    lastProof =
+      guesses === undefined
+        ? await generateRecursiveRandomProof(
+            rounds - 1,
+            lastProof,
+            salt,
+            secret,
+            codeBreakerKey,
+            codeMasterKey
+          )
+        : await generateRecursiveGuessProof(
+            rounds - 1,
+            lastProof,
+            salt,
+            secret,
+            codeBreakerKey,
+            codeMasterKey
+          );
+
+    // Last step that simulates the correct secret submission by codeBreaker.
+    lastProof = await StepProgramMakeGuess(lastProof, secret, codeBreakerKey);
+
+    // Return the last proof that result is checked by codeMaster.
+    return await StepProgramGiveClue(lastProof, secret, salt, codeMasterKey);
+  } else if (flag === 'unsolved') {
+    if (guesses)
+      if (rounds > 15)
+        throw new Error(
+          "Maximum attempts for unsolved case can't be more than 15!"
+        );
+
+    lastProof =
+      guesses === undefined
+        ? await generateRecursiveRandomProof(
+            rounds,
+            lastProof,
+            salt,
+            secret,
+            codeBreakerKey,
+            codeMasterKey
+          )
+        : await generateRecursiveGuessProof(
+            rounds,
+            lastProof,
+            salt,
+            secret,
+            codeBreakerKey,
+            codeMasterKey
+          );
+
     return lastProof;
   } else {
-    throw new Error('WinnerFlag is not valid!');
+    throw new Error('Winner flag is not valid!');
   }
 };
 
@@ -190,9 +298,9 @@ export const generateTestProofs = async (
  * @property {number[][]} totalAttempts - A predefined sequence of guesses used during the game.
  *                                        Each nested array represents a single guess attempt.
  */
-export const guessConfig1 = {
-  secret: [6, 3, 8, 4],
+const secretCombination = [6, 3, 8, 4];
 
+const gameGuesses = {
   totalAttempts: [
     [1, 2, 3, 4],
     [5, 6, 7, 8],
@@ -201,7 +309,7 @@ export const guessConfig1 = {
     [5, 8, 3, 2],
     [5, 3, 7, 2],
     [5, 3, 8, 1],
-    [6, 3, 8, 2],
+    [3, 1, 7, 2],
     [5, 4, 8, 2],
     [5, 3, 6, 2],
     [5, 3, 8, 9],
@@ -209,5 +317,9 @@ export const guessConfig1 = {
     [7, 3, 8, 2],
     [5, 2, 8, 3],
     [8, 3, 5, 2],
+    [8, 3, 3, 2],
+    [7, 1, 3, 8],
+    [4, 3, 5, 2],
+    [4, 7, 3, 1],
   ],
 };

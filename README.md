@@ -1,3 +1,5 @@
+[![zkApp tests](https://github.com/navigators-exploration-team/recursive-mastermind-zkApp/actions/workflows/ci.yml/badge.svg)](https://github.com/navigators-exploration-team/recursive-mastermind-zkApp/actions/workflows/ci.yml)
+
 # Mina zkApp: Mina Mastermind Level 1
 
 ![alt text](./mastermind-board.png)
