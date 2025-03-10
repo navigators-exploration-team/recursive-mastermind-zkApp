@@ -670,7 +670,7 @@ describe('Mastermind ZkApp Tests', () => {
       await expectProofSubmissionToFail(wrongProof, expectedMsg);
     });
 
-    it('Rejects initGame if maxAttempts > 15', async () => {
+    it('Reject initGame if maxAttempts > 15', async () => {
       const expectedMsg = 'The maximum number of attempts allowed is 15!';
       await expectInitializeGameToFail(
         zkapp,
@@ -683,7 +683,7 @@ describe('Mastermind ZkApp Tests', () => {
       );
     });
 
-    it('Rejects initGame if maxAttempts < 5', async () => {
+    it('Reject initGame if maxAttempts < 5', async () => {
       const expectedMsg = 'The minimum number of attempts allowed is 5!';
       await expectInitializeGameToFail(
         zkapp,
@@ -746,7 +746,7 @@ describe('Mastermind ZkApp Tests', () => {
       log(expect.getState().currentTestName);
     });
 
-    it('Rejects submitGameProof before acceptGame', async () => {
+    it('Reject submitGameProof before acceptGame', async () => {
       const expectedMsg =
         'The game has not been accepted by the codeBreaker yet!';
       await expectProofSubmissionToFail(wrongProof, expectedMsg);
@@ -869,18 +869,18 @@ describe('Mastermind ZkApp Tests', () => {
       );
     });
 
-    it('Reject submitting a same proof again', async () => {
+    it('Reject submitting the same proof again', async () => {
       const expectedMsg = 'The game secret has already been solved!';
       await expectProofSubmissionToFail(completedProof, expectedMsg);
     });
 
-    it('Rejects reward claim from intruder', async () => {
+    it('Reject reward claim from intruder', async () => {
       const expectedMsg =
         'You are not the codeMaster or codeBreaker of this game!';
       await expectClaimRewardToFail(intruderPubKey, intruderKey, expectedMsg);
     });
 
-    it('Rejects codeMaster claim if they lost', async () => {
+    it('Reject codeMaster claim if they lost', async () => {
       const expectedMsg = 'You are not the winner of this game!';
       await expectClaimRewardToFail(
         codeMasterPubKey,
@@ -910,7 +910,7 @@ describe('Mastermind ZkApp Tests', () => {
       await prepareNewGame();
     }, 10 * 60 * 1000);
 
-    it('penalty for codeMaster', async () => {
+    it('Penalty for codeMaster', async () => {
       log('Penalty for codeMaster');
       await forfeitWinForPlayer(refereeKey, codeBreakerPubKey);
     });
