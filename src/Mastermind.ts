@@ -10,7 +10,6 @@ import {
   PublicKey,
   UInt32,
   Permissions,
-  Provable,
   Struct,
 } from 'o1js';
 
@@ -178,7 +177,7 @@ class MastermindZkApp extends SmartContract {
     const refereeId = Poseidon.hash(refereePubKey.toFields());
     this.refereeId.set(refereeId);
 
-    //! Separate combination digits and validate
+    // Separate combination digits and validate
     const secretCombination = separateCombinationDigits(
       unseparatedSecretCombination
     );
@@ -462,16 +461,22 @@ class MastermindZkApp extends SmartContract {
         this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
       );
 
-    //! Assert that the secret combination is not solved yet
+    // Assert that the game has been accepted by the codeBreaker
+    turnCount.assertGreaterThan(
+      Field.from(0),
+      'The game has not been accepted by the codeBreaker yet!'
+    );
+
+    // Assert that the secret combination is not solved yet
     isSolved.assertEquals(0, 'The game secret has already been solved!');
 
-    //! Only allow codeBreaker to call this method following the correct turn sequence
+    // Only allow codeBreaker to call this method following the correct turn sequence
     const isCodebreakerTurn = turnCount.isEven().not();
     isCodebreakerTurn.assertTrue(
       'Please wait for the codeMaster to give you a clue!'
     );
 
-    //! Assert that the codeBreaker has not reached the limit number of attempts
+    // Assert that the codeBreaker has not reached the limit number of attempts
     turnCount.assertLessThan(
       maxAttempts.mul(2),
       'You have reached the number limit of attempts to solve the secret combination!'
@@ -482,27 +487,16 @@ class MastermindZkApp extends SmartContract {
       this.sender.getAndRequireSignature().toFields()
     );
 
-    const setCodeBreakerId = () => {
-      this.codeBreakerId.set(computedCodebreakerId);
-      return computedCodebreakerId;
-    };
+    // Get the codeBreaker ID from the on-chain state
+    const codeBreakerId = this.codeBreakerId.getAndRequireEquals();
 
-    //? If first guess ==> set the codeBreaker ID
-    //? Else           ==> fetch the codeBreaker ID
-    const isFirstGuess = turnCount.equals(1);
-    const codeBreakerId = Provable.if(
-      isFirstGuess,
-      setCodeBreakerId(),
-      this.codeBreakerId.getAndRequireEquals()
-    );
-
-    //! Restrict method access solely to the correct codeBreaker
+    // Restrict method access solely to the correct codeBreaker
     computedCodebreakerId.assertEquals(
       codeBreakerId,
       'You are not the codeBreaker of this game!'
     );
 
-    //! Separate and validate the guess combination
+    // Separate and validate the guess combination
     const guessDigits = separateCombinationDigits(unseparatedGuess);
     validateCombination(guessDigits);
 
@@ -554,7 +548,7 @@ class MastermindZkApp extends SmartContract {
       this.sender.getAndRequireSignature().toFields()
     );
 
-    //! Restrict method access solely to the correct codeMaster
+    // Restrict method access solely to the correct codeMaster
     this.codeMasterId
       .getAndRequireEquals()
       .assertEquals(
@@ -562,21 +556,26 @@ class MastermindZkApp extends SmartContract {
         'Only the codeMaster of this game is allowed to give clue!'
       );
 
-    //! Assert that the codeBreaker has not reached the limit number of attempts
+    // Assert that the codeBreaker has not reached the limit number of attempts
     turnCount.assertLessThanOrEqual(
       maxAttempts.mul(2),
       'The codeBreaker has finished the number of attempts without solving the secret combination!'
     );
 
-    //! Assert that the secret combination is not solved yet
+    // Assert that the secret combination is not solved yet
     isSolved.assertEquals(
       0,
       'The codeBreaker has already solved the secret combination!'
     );
 
-    //! Assert that the turnCount is pair & not zero for the codeMaster to call this method
-    const isNotFirstTurn = turnCount.equals(0).not();
-    const isCodemasterTurn = turnCount.isEven().and(isNotFirstTurn);
+    // Assert that the game is accepted by the codeBreaker
+    turnCount.assertNotEquals(
+      Field.from(0),
+      'Game has not been accepted by the codeBreaker yet!'
+    );
+
+    // Only allow codeMaster to call this method following the correct turn sequence
+    const isCodemasterTurn = turnCount.isEven();
     isCodemasterTurn.assertTrue(
       'Please wait for the codeBreaker to make a guess!'
     );
@@ -584,7 +583,7 @@ class MastermindZkApp extends SmartContract {
     // Separate the secret combination digits
     const solution = separateCombinationDigits(unseparatedSecretCombination);
 
-    //! Compute solution hash and assert integrity to state on-chain
+    // Compute solution hash and assert integrity to state on-chain
     const computedSolutionHash = Poseidon.hash([...solution, salt]);
     this.solutionHash
       .getAndRequireEquals()
