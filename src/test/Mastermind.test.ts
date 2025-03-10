@@ -756,7 +756,9 @@ describe('Mastermind ZkApp Tests', () => {
       await acceptGame(codeBreakerPubKey, codeBreakerKey);
 
       const codeBreakerId = zkapp.codeBreakerId.get();
-      expect(codeBreakerId).toEqual(codeBreakerId);
+      expect(codeBreakerId.toBigInt()).toEqual(
+        Poseidon.hash(codeBreakerPubKey.toFields()).toBigInt()
+      );
     });
 
     it('Reject accepting the game again', async () => {
