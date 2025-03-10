@@ -32,19 +32,21 @@ import {
 } from './utils.js';
 import { StepProgramProof } from './stepProgram.js';
 
-export const GAME_DURATION = 30; // 30 slots
+export { GAME_DURATION, NewGameEvent, GameAcceptedEvent, MastermindZkApp };
 
-export class NewGameEvent extends Struct({
+const GAME_DURATION = 30; // 30 slots
+
+class NewGameEvent extends Struct({
   rewardAmount: UInt64,
   maxAttempts: Field,
 }) {}
 
-export class GameAcceptedEvent extends Struct({
+class GameAcceptedEvent extends Struct({
   codeBreakerPubKey: PublicKey,
   finalizeSlot: UInt32,
 }) {}
 
-export class MastermindZkApp extends SmartContract {
+class MastermindZkApp extends SmartContract {
   /**
    * `turnCountMaxAttemptsIsSolved` is a compressed state variable that
    * stores the current turn count, maximum number of attempts allowed, and whether the game has been solved.
