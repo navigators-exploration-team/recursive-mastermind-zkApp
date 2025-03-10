@@ -11,6 +11,7 @@ import {
   UInt32,
   Permissions,
   Provable,
+  Struct,
 } from 'o1js';
 
 import {
@@ -18,16 +19,30 @@ import {
   compressRewardAndFinalizeSlot,
   compressTurnCountMaxAttemptSolved,
   deserializeClue,
+  deserializeCombinationHistory,
   getClueFromGuess,
+  getElementAtIndex,
   separateCombinationDigits,
   separateRewardAndFinalizeSlot,
   separateTurnCountAndMaxAttemptSolved,
   serializeClue,
+  serializeCombinationHistory,
+  updateElementAtIndex,
   validateCombination,
 } from './utils.js';
 import { StepProgramProof } from './stepProgram.js';
 
-export const GAME_DURATION = 10; // 10 slots
+export const GAME_DURATION = 30; // 30 slots
+
+export class NewGameEvent extends Struct({
+  rewardAmount: UInt64,
+  maxAttempts: Field,
+}) {}
+
+export class GameAcceptedEvent extends Struct({
+  codeBreakerPubKey: PublicKey,
+  finalizeSlot: UInt32,
+}) {}
 
 export class MastermindZkApp extends SmartContract {
   /**
@@ -59,14 +74,14 @@ export class MastermindZkApp extends SmartContract {
   @state(Field) solutionHash = State<Field>();
 
   /**
-   * `unseparatedGuess` is the last guess made by the codeBreaker.
+   * `packedGuessHistory` is the compressed state variable that stores the history of guesses made by the codeBreaker.
    */
-  @state(Field) unseparatedGuess = State<Field>();
+  @state(Field) packedGuessHistory = State<Field>();
 
   /**
-   * `serializedClue` is the serialized clue given by the codeMaster to the codeBreaker.
+   * `packedClueHistory` is the compressed state variable that stores the history of clues given by the codeMaster.
    */
-  @state(Field) serializedClue = State<Field>();
+  @state(Field) packedClueHistory = State<Field>();
 
   /**
    * `rewardFinalizeSlot` is a compressed state variable that stores the reward amount(`UInt64`) and the slot(`UInt32`) when the game is finalized.
@@ -75,31 +90,36 @@ export class MastermindZkApp extends SmartContract {
    */
   @state(Field) rewardFinalizeSlot = State<Field>();
 
+  readonly events = {
+    newGame: NewGameEvent,
+    gameAccepted: GameAcceptedEvent,
+  };
+
   /**
-   * Asserts that the game has been finalized. For internal use only.
+   * Checks if the game has been finalized.
+   * @returns `true` if the game has been finalized, `false` otherwise.
    */
-  async assertFinalized() {
+  async isFinalized() {
     const { finalizeSlot } = separateRewardAndFinalizeSlot(
       this.rewardFinalizeSlot.getAndRequireEquals()
     );
-    this.network.globalSlotSinceGenesis
-      .getAndRequireEquals()
-      .assertGreaterThanOrEqual(
-        finalizeSlot,
-        'The game has not been finalized yet!'
-      );
+
+    const currentSlot = this.network.globalSlotSinceGenesis.get();
+    this.network.globalSlotSinceGenesis.requireBetween(
+      currentSlot,
+      finalizeSlot
+    );
+
+    return currentSlot.greaterThanOrEqual(finalizeSlot);
   }
 
   /**
    * Asserts that the game is still ongoing. For internal use only.
    */
   async assertNotFinalized() {
-    const { finalizeSlot } = separateRewardAndFinalizeSlot(
-      this.rewardFinalizeSlot.getAndRequireEquals()
+    (await this.isFinalized()).assertFalse(
+      'The game has already been finalized!'
     );
-    this.network.globalSlotSinceGenesis
-      .getAndRequireEquals()
-      .assertLessThan(finalizeSlot, 'The game has already been finalized!');
   }
 
   async deploy() {
@@ -181,6 +201,15 @@ export class MastermindZkApp extends SmartContract {
     this.rewardFinalizeSlot.set(
       compressRewardAndFinalizeSlot(rewardAmount, UInt32.zero)
     );
+
+    // Emit the newGame event to be listened to by the server
+    this.emitEvent(
+      'newGame',
+      new NewGameEvent({
+        rewardAmount,
+        maxAttempts,
+      })
+    );
   }
 
   /**
@@ -219,8 +248,11 @@ export class MastermindZkApp extends SmartContract {
     const codeBreakerId = Poseidon.hash(sender.toFields());
     this.codeBreakerId.set(codeBreakerId);
 
-    const currentSlot =
-      this.network.globalSlotSinceGenesis.getAndRequireEquals();
+    const currentSlot = this.network.globalSlotSinceGenesis.get();
+    this.network.globalSlotSinceGenesis.requireBetween(
+      currentSlot,
+      currentSlot.add(UInt32.from(5))
+    );
     // Set the finalize slot to GAME_DURATION slots after the current slot (slot time is 3 minutes)
     const finalizeSlot = currentSlot.add(UInt32.from(GAME_DURATION));
     this.rewardFinalizeSlot.set(
@@ -228,6 +260,15 @@ export class MastermindZkApp extends SmartContract {
         rewardAmount.add(rewardAmount),
         finalizeSlot
       )
+    );
+
+    // Emit the gameAccepted event to be listened to by the server
+    this.emitEvent(
+      'gameAccepted',
+      new GameAcceptedEvent({
+        codeBreakerPubKey: sender,
+        finalizeSlot,
+      })
     );
   }
 
@@ -289,8 +330,8 @@ export class MastermindZkApp extends SmartContract {
       .toField();
 
     this.codeBreakerId.set(proof.publicOutput.codeBreakerId);
-    this.unseparatedGuess.set(proof.publicOutput.lastGuess);
-    this.serializedClue.set(proof.publicOutput.serializedClue);
+    this.packedGuessHistory.set(proof.publicOutput.packedGuessHistory);
+    this.packedClueHistory.set(proof.publicOutput.packedClueHistory);
 
     const updatedTurnCountMaxAttemptsIsSolved =
       compressTurnCountMaxAttemptSolved([
@@ -307,11 +348,12 @@ export class MastermindZkApp extends SmartContract {
    * @throws If the game has not been finalized yet, or if the caller is not the winner.
    */
   @method async claimReward() {
-    let [, , isSolved] = separateTurnCountAndMaxAttemptSolved(
-      this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
-    );
+    let [turnCount, maxAttempts, isSolved] =
+      separateTurnCountAndMaxAttemptSolved(
+        this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
+      );
 
-    await this.assertFinalized();
+    const isFinalized = await this.isFinalized();
 
     const claimer = this.sender.getAndRequireSignature();
 
@@ -324,13 +366,24 @@ export class MastermindZkApp extends SmartContract {
     const isCodeMaster = codeMasterId.equals(computedCodeMasterId);
     const isCodeBreaker = codeBreakerId.equals(computedCodebreakerId);
 
+    // Code Master wins if the game is finalized and the codeBreaker has not solved the secret combination yet
+    const codeMasterWinByFinalize = isSolved.equals(0).and(isFinalized);
+    // Code Master wins if the codeBreaker has reached the maximum number of attempts without solving the secret combination
+    const codeMasterWinByMaxAttempts = isSolved
+      .equals(0)
+      .and(turnCount.equals(maxAttempts.mul(2)));
+
+    // Code Breaker wins if the game is solved
+    const codeBreakerWin = isSolved.equals(1);
+
     isCodeMaster
       .or(isCodeBreaker)
       .assertTrue('You are not the codeMaster or codeBreaker of this game!');
 
     const isWinner = isCodeMaster
-      .and(isSolved.equals(0))
-      .or(isCodeBreaker.and(isSolved.equals(1)));
+      .and(codeMasterWinByFinalize.or(codeMasterWinByMaxAttempts))
+      .or(isCodeBreaker.and(codeBreakerWin));
+
     isWinner.assertTrue('You are not the winner of this game!');
 
     const { rewardAmount } = separateRewardAndFinalizeSlot(
@@ -358,13 +411,17 @@ export class MastermindZkApp extends SmartContract {
       'You are not the referee of this game!'
     );
 
+    const codeBreakerId = this.codeBreakerId.getAndRequireEquals();
+    const codeMasterId = this.codeMasterId.getAndRequireEquals();
+
+    codeBreakerId.assertNotEquals(
+      Field.from(0),
+      'The game has not been accepted by the codeBreaker yet!'
+    );
+
     const playerID = Poseidon.hash(playerPubKey.toFields());
-    const isCodeBreaker = this.codeBreakerId
-      .getAndRequireEquals()
-      .equals(playerID);
-    const isCodeMaster = this.codeMasterId
-      .getAndRequireEquals()
-      .equals(playerID);
+    const isCodeBreaker = codeBreakerId.equals(playerID);
+    const isCodeMaster = codeMasterId.equals(playerID);
 
     isCodeBreaker
       .or(isCodeMaster)
@@ -447,8 +504,20 @@ export class MastermindZkApp extends SmartContract {
     const guessDigits = separateCombinationDigits(unseparatedGuess);
     validateCombination(guessDigits);
 
-    // Update the on-chain unseparated guess
-    this.unseparatedGuess.set(unseparatedGuess);
+    const guessHistory = deserializeCombinationHistory(
+      this.packedGuessHistory.getAndRequireEquals()
+    );
+    const updatedGuessHistory = updateElementAtIndex(
+      unseparatedGuess,
+      guessHistory,
+      turnCount.sub(1).div(2)
+    );
+
+    const serializedUpdatedGuessHistory =
+      serializeCombinationHistory(updatedGuessHistory);
+
+    // Update the on-chain guess history
+    this.packedGuessHistory.set(serializedUpdatedGuessHistory);
 
     // Increment turnCount and wait for the codeMaster to give a clue
     const updatedTurnCountMaxAttemptsIsSolved =
@@ -523,15 +592,33 @@ export class MastermindZkApp extends SmartContract {
       );
 
     // Fetch & separate the on-chain guess
-    const unseparatedGuess = this.unseparatedGuess.getAndRequireEquals();
-    const guessDigits = separateCombinationDigits(unseparatedGuess);
+    const guessHistory = deserializeCombinationHistory(
+      this.packedGuessHistory.getAndRequireEquals()
+    );
+
+    const guessIndex = turnCount.div(2).sub(1);
+    const latestGuess = getElementAtIndex(guessHistory, guessIndex);
+
+    const guessDigits = separateCombinationDigits(latestGuess);
 
     // Scan the guess through the solution and return clue result(hit or blow)
     let clue = getClueFromGuess(guessDigits, solution);
 
-    // Serialize & update the on-chain clue
+    // Serialize the clue and update the on-chain clue history
     const serializedClue = serializeClue(clue);
-    this.serializedClue.set(serializedClue);
+    const clueHistory = deserializeCombinationHistory(
+      this.packedClueHistory.getAndRequireEquals()
+    );
+    const updatedClueHistory = updateElementAtIndex(
+      serializedClue,
+      clueHistory,
+      guessIndex
+    );
+
+    const serializedUpdatedClueHistory =
+      serializeCombinationHistory(updatedClueHistory);
+
+    this.packedClueHistory.set(serializedUpdatedClueHistory);
 
     // Check if the guess is correct & update the on-chain state
     let isSolvedThisTurn = checkIfSolved(clue).toField();
