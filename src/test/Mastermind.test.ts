@@ -927,6 +927,19 @@ describe('Mastermind ZkApp Tests', () => {
       log(expect.getState().currentTestName);
     });
 
+    it('Intruder tries to make guess before code creaker', async () => {
+      const unseparatedGuess = compressCombinationDigits(
+        [2, 1, 3, 4].map(Field)
+      );
+
+      const guessTx = async () => {
+        await makeGuess(intruderPubKey, intruderKey, unseparatedGuess);
+      };
+
+      const expectedMsg = 'You are not the codeBreaker of this game!';
+      await expect(guessTx()).rejects.toThrowError(expectedMsg);
+    });
+
     it('makeGuess method', async () => {
       const unseparatedGuess = compressCombinationDigits(
         [2, 1, 3, 4].map(Field)
@@ -983,7 +996,7 @@ describe('Mastermind ZkApp Tests', () => {
       );
     });
 
-    it('Intruder tries to make guess', async () => {
+    it('Intruder tries to make guess again', async () => {
       const unseparatedGuess = compressCombinationDigits(
         [1, 2, 3, 4].map(Field)
       );
