@@ -36,8 +36,8 @@ import { players } from './mock';
 
 describe('Mastermind ZkApp Tests', () => {
   // Global variables
-  let testEnvironment = 'local';
-  let logsEnabled = false;
+  const testEnvironment = process.env.TEST_ENV ?? 'local';
+  const logsEnabled = process.env.LOGS_ENABLED === '1';
   const localTest = testEnvironment === 'local';
   let fee = localTest ? 0 : 1e9;
   let proofsEnabled = false;
