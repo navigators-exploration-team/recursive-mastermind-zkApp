@@ -372,7 +372,7 @@ class MastermindZkApp extends SmartContract {
     // Code Master wins if the codeBreaker has reached the maximum number of attempts without solving the secret combination
     const codeMasterWinByMaxAttempts = isSolved
       .equals(0)
-      .and(turnCount.equals(maxAttempts.mul(2)));
+      .and(turnCount.greaterThanOrEqual(maxAttempts.mul(2)));
 
     // Code Breaker wins if the game is solved
     const codeBreakerWin = isSolved.equals(1);
