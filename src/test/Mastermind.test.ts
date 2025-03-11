@@ -36,8 +36,8 @@ import { players } from './mock';
 
 describe('Mastermind ZkApp Tests', () => {
   // Global variables
-  let testEnvironment = 'local';
-  let logsEnabled = true;
+  const testEnvironment = process.env.TEST_ENV ?? 'local';
+  const logsEnabled = process.env.LOGS_ENABLED === '1';
   const localTest = testEnvironment === 'local';
   let fee = localTest ? 0 : 1e9;
   let proofsEnabled = false;
@@ -670,7 +670,7 @@ describe('Mastermind ZkApp Tests', () => {
       await expectProofSubmissionToFail(wrongProof, expectedMsg);
     });
 
-    it('Rejects initGame if maxAttempts > 15', async () => {
+    it('Reject initGame if maxAttempts > 15', async () => {
       const expectedMsg = 'The maximum number of attempts allowed is 15!';
       await expectInitializeGameToFail(
         zkapp,
@@ -683,7 +683,7 @@ describe('Mastermind ZkApp Tests', () => {
       );
     });
 
-    it('Rejects initGame if maxAttempts < 5', async () => {
+    it('Reject initGame if maxAttempts < 5', async () => {
       const expectedMsg = 'The minimum number of attempts allowed is 5!';
       await expectInitializeGameToFail(
         zkapp,
@@ -746,7 +746,7 @@ describe('Mastermind ZkApp Tests', () => {
       log(expect.getState().currentTestName);
     });
 
-    it('Rejects submitGameProof before acceptGame', async () => {
+    it('Reject submitGameProof before acceptGame', async () => {
       const expectedMsg =
         'The game has not been accepted by the codeBreaker yet!';
       await expectProofSubmissionToFail(wrongProof, expectedMsg);
@@ -756,7 +756,9 @@ describe('Mastermind ZkApp Tests', () => {
       await acceptGame(codeBreakerPubKey, codeBreakerKey);
 
       const codeBreakerId = zkapp.codeBreakerId.get();
-      expect(codeBreakerId).toEqual(codeBreakerId);
+      expect(codeBreakerId.toBigInt()).toEqual(
+        Poseidon.hash(codeBreakerPubKey.toFields()).toBigInt()
+      );
     });
 
     it('Reject accepting the game again', async () => {
@@ -869,18 +871,18 @@ describe('Mastermind ZkApp Tests', () => {
       );
     });
 
-    it('Reject submitting a same proof again', async () => {
+    it('Reject submitting the same proof again', async () => {
       const expectedMsg = 'The game secret has already been solved!';
       await expectProofSubmissionToFail(completedProof, expectedMsg);
     });
 
-    it('Rejects reward claim from intruder', async () => {
+    it('Reject reward claim from intruder', async () => {
       const expectedMsg =
         'You are not the codeMaster or codeBreaker of this game!';
       await expectClaimRewardToFail(intruderPubKey, intruderKey, expectedMsg);
     });
 
-    it('Rejects codeMaster claim if they lost', async () => {
+    it('Reject codeMaster claim if they lost', async () => {
       const expectedMsg = 'You are not the winner of this game!';
       await expectClaimRewardToFail(
         codeMasterPubKey,
@@ -910,7 +912,7 @@ describe('Mastermind ZkApp Tests', () => {
       await prepareNewGame();
     }, 10 * 60 * 1000);
 
-    it('penalty for codeMaster', async () => {
+    it('Penalty for codeMaster', async () => {
       log('Penalty for codeMaster');
       await forfeitWinForPlayer(refereeKey, codeBreakerPubKey);
     });
@@ -923,6 +925,19 @@ describe('Mastermind ZkApp Tests', () => {
 
     beforeEach(() => {
       log(expect.getState().currentTestName);
+    });
+
+    it('Intruder tries to make guess before code creaker', async () => {
+      const unseparatedGuess = compressCombinationDigits(
+        [2, 1, 3, 4].map(Field)
+      );
+
+      const guessTx = async () => {
+        await makeGuess(intruderPubKey, intruderKey, unseparatedGuess);
+      };
+
+      const expectedMsg = 'You are not the codeBreaker of this game!';
+      await expect(guessTx()).rejects.toThrowError(expectedMsg);
     });
 
     it('makeGuess method', async () => {
@@ -981,7 +996,7 @@ describe('Mastermind ZkApp Tests', () => {
       );
     });
 
-    it('Intruder tries to make guess', async () => {
+    it('Intruder tries to make guess again', async () => {
       const unseparatedGuess = compressCombinationDigits(
         [1, 2, 3, 4].map(Field)
       );
@@ -994,13 +1009,16 @@ describe('Mastermind ZkApp Tests', () => {
       await expect(guessTx()).rejects.toThrowError(expectedMsg);
     });
 
-    it(
-      'Claim reward successfully',
-      async () => {
-        await waitForFinalize();
-        await claimReward(codeMasterPubKey, codeMasterKey);
-      },
-      10 * 60 * 1000
-    );
+    // Skip this test on devnet due to long wait time
+    if (testEnvironment !== 'devnet') {
+      it(
+        'Claim reward successfully',
+        async () => {
+          await waitForFinalize();
+          await claimReward(codeMasterPubKey, codeMasterKey);
+        },
+        10 * 60 * 1000
+      );
+    }
   });
 });
