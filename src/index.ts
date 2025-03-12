@@ -2,7 +2,7 @@ import { MastermindZkApp } from './Mastermind.js';
 import {
   StepProgram,
   StepProgramProof,
-  PublicInputs,
+  AuthInputs,
   PublicOutputs,
 } from './stepProgram.js';
 import {
@@ -28,7 +28,7 @@ import {
 export {
   MastermindZkApp,
   StepProgram,
-  PublicInputs,
+  AuthInputs,
   PublicOutputs,
   StepProgramProof,
   separateCombinationDigits,

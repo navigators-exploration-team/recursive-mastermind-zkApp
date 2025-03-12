@@ -23,12 +23,12 @@ import {
   validateCombination,
 } from './utils.js';
 
-export { StepProgram, PublicInputs, PublicOutputs, StepProgramProof };
+export { StepProgram, AuthInputs, PublicOutputs, StepProgramProof };
 
 /**
  * authPubKey and authSignature is used for the authenticity of the data transferred. It enables a p2p authenticated communication.
  */
-class PublicInputs extends Struct({
+class AuthInputs extends Struct({
   authPubKey: PublicKey,
   authSignature: Signature,
 }) {}
@@ -54,7 +54,7 @@ class PublicOutputs extends Struct({
 
 const StepProgram = ZkProgram({
   name: 'StepProgram',
-  publicInput: PublicInputs,
+  publicInput: undefined,
   publicOutput: PublicOutputs,
 
   methods: {
@@ -67,29 +67,11 @@ const StepProgram = ZkProgram({
      * @returns the proof of the new game and the public output.
      */
     createGame: {
-      privateInputs: [Field, Field],
-      async method(
-        authInputs: PublicInputs,
-        unseparatedSecretCombination: Field,
-        salt: Field
-      ) {
-        //! Separate combination digits and validate
-        const secretCombination = separateCombinationDigits(
-          unseparatedSecretCombination
-        );
-
-        validateCombination(secretCombination);
-        const solutionHash = Poseidon.hash([...secretCombination, salt]);
-
-        //! Verify the signature of code master
-        authInputs.authSignature
-          .verify(authInputs.authPubKey, [unseparatedSecretCombination, salt])
-          .assertTrue('Invalid signature!');
-        const codeMasterId = Poseidon.hash(authInputs.authPubKey.toFields());
-
+      privateInputs: [Field],
+      async method(solutionHash: Field) {
         return {
           publicOutput: new PublicOutputs({
-            codeMasterId: codeMasterId,
+            codeMasterId: Field.empty(),
             codeBreakerId: Field.empty(),
             solutionHash,
             lastGuess: Field.empty(),
@@ -112,10 +94,10 @@ const StepProgram = ZkProgram({
      * The codeBreaker can only make a guess if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
      */
     makeGuess: {
-      privateInputs: [SelfProof, Field],
+      privateInputs: [AuthInputs, SelfProof, Field],
       async method(
-        authInputs: PublicInputs,
-        previousClue: SelfProof<PublicInputs, PublicOutputs>,
+        authInputs: AuthInputs,
+        previousClue: SelfProof<AuthInputs, PublicOutputs>,
         unseparatedGuess: Field
       ) {
         previousClue.verify();
@@ -196,10 +178,10 @@ const StepProgram = ZkProgram({
      * The codeMaster can only give a clue if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
      */
     giveClue: {
-      privateInputs: [SelfProof, Field, Field],
+      privateInputs: [AuthInputs, SelfProof, Field, Field],
       async method(
-        authInputs: PublicInputs,
-        previousGuess: SelfProof<PublicInputs, PublicOutputs>,
+        authInputs: AuthInputs,
+        previousGuess: SelfProof<AuthInputs, PublicOutputs>,
         unseparatedSecretCombination: Field,
         salt: Field
       ) {
@@ -214,20 +196,7 @@ const StepProgram = ZkProgram({
             salt,
             turnCount,
           ])
-          .assertTrue(
-            'Only the codeMaster of this game is allowed to give clue!'
-          );
-
-        // Generate codeMaster ID
-        const computedCodemasterId = Poseidon.hash(
-          authInputs.authPubKey.toFields()
-        );
-
-        //! Restrict method access solely to the correct codeMaster
-        previousGuess.publicOutput.codeMasterId.assertEquals(
-          computedCodemasterId,
-          'Only the codeMaster of this game is allowed to give clue!'
-        );
+          .assertTrue('Provided signature does not match with the message!');
 
         //! Assert that the turnCount is pair & not zero for the codeMaster to call this method
         const isNotFirstTurn = turnCount.equals(0).not();
@@ -235,6 +204,19 @@ const StepProgram = ZkProgram({
         isCodemasterTurn.assertTrue(
           'Please wait for the codeBreaker to make a guess!'
         );
+
+        //? If first clue ==> set the codeMaster ID
+        //? Else           ==> use the previous codeMaster ID
+        const isFirstClue = turnCount.equals(2);
+        const computedCodemasterId = Poseidon.hash(
+          authInputs.authPubKey.toFields()
+        );
+
+        //! Restrict method access solely to the correct codeMaster
+        previousGuess.publicOutput.codeMasterId
+          .equals(computedCodemasterId)
+          .or(isFirstClue)
+          .assertTrue('You are not the codeMaster of this game!');
 
         // Separate the secret combination digits
         const solution = separateCombinationDigits(
@@ -287,6 +269,7 @@ const StepProgram = ZkProgram({
         return {
           publicOutput: new PublicOutputs({
             ...previousGuess.publicOutput,
+            codeMasterId: computedCodemasterId,
             serializedClue,
             turnCount: turnCount.add(1),
             packedClueHistory: serializedUpdatedClueHistory,
