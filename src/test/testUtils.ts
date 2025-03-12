@@ -1,4 +1,4 @@
-import { Field, PrivateKey, Signature } from 'o1js';
+import { Field, Poseidon, PrivateKey, Signature } from 'o1js';
 import { compressCombinationDigits } from '../utils';
 import { StepProgram, StepProgramProof } from '../stepProgram';
 
@@ -15,20 +15,9 @@ export {
  * Creates a new game and returns the resulting proof.
  */
 const StepProgramCreateGame = async (
-  secret: number[],
-  salt: Field,
-  codeMasterKey: PrivateKey
+  solutionHash: Field
 ): Promise<StepProgramProof> => {
-  const unseparatedSecret = compressCombinationDigits(secret.map(Field));
-
-  const { proof } = await StepProgram.createGame(
-    {
-      authPubKey: codeMasterKey.toPublicKey(),
-      authSignature: Signature.create(codeMasterKey, [unseparatedSecret, salt]),
-    },
-    unseparatedSecret,
-    salt
-  );
+  const { proof } = await StepProgram.createGame(solutionHash);
   return proof;
 };
 
@@ -207,7 +196,8 @@ const generateTestProofs = async (
   codeMasterKey: PrivateKey,
   guesses?: typeof gameGuesses
 ): Promise<StepProgramProof> => {
-  let lastProof = await StepProgramCreateGame(secret, salt, codeMasterKey);
+  const solutionHash = Poseidon.hash([...secret.map(Field), salt]);
+  let lastProof = await StepProgramCreateGame(solutionHash);
 
   if (flag === 'codemaster-victory') {
     lastProof =
