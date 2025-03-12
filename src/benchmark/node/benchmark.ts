@@ -6,11 +6,16 @@ import {
   AccountUpdate,
   Signature,
   UInt64,
+  Poseidon,
 } from 'o1js';
 
 import { StepProgram, StepProgramProof } from '../../stepProgram.js';
 import { performance } from 'perf_hooks';
-import { checkIfSolved, deserializeClue } from '../../utils.js';
+import {
+  checkIfSolved,
+  deserializeClue,
+  separateCombinationDigits,
+} from '../../utils.js';
 
 async function deployAndInitializeGame(
   zkapp: MastermindZkApp,
@@ -295,15 +300,10 @@ async function solveBenchmark(secret: number, steps: Field[]) {
   start = performance.now();
   lastProof = (
     await StepProgram.createGame(
-      {
-        authPubKey: codeMasterPubKey,
-        authSignature: Signature.create(codeMasterKey, [
-          unseparatedSecretCombination,
-          codeMasterSalt,
-        ]),
-      },
-      unseparatedSecretCombination,
-      codeMasterSalt
+      Poseidon.hash([
+        ...separateCombinationDigits(unseparatedSecretCombination),
+        codeMasterSalt,
+      ])
     )
   ).proof;
   end = performance.now();
