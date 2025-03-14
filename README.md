@@ -6,14 +6,6 @@
 
 # Table of Contents
 
-- This README is divided into two main sections: **Mastermind Game Documentation** and **General zkApp Documentation**.
-
-  - **The Mastermind Game Documentation** is focused on the specific implementation of the Mastermind game as a zkApp example. This section details the game rules, the structure of the zkApp tailored for Mastermind, and the methods specific to this game.
-
-  - **The General zkApp Documentation** provides broader information about zkApps, including their structure, security considerations, best practices, and relevant APIs. This section is applicable to any zkApp you might develop, not just the Mastermind game.
-
-## Mastermind Game Documentation
-
 - [Understanding the Mastermind Game](#understanding-the-mastermind-game)
 
   - [Overview](#overview)
@@ -56,6 +48,8 @@
 
 - [License](#license)
 
+# Understanding the Mastermind Game
+
 ## Overview
 
 - The game involves two players: a `Code Master` and a `Code Breaker`.
@@ -86,7 +80,6 @@
     - Result: `1` hit and `1` blow.
       - The hit is `5` in the first position.
       - The blow is `9` in the fourth position.
-      -
 
 - The game continues with alternating guesses and clues until the Code Breaker achieves 4 hits and uncovers the secret combination or fails to do so within the **maximum allowed attempts**.
 
@@ -372,15 +365,15 @@ src/
 
 - **`test/`**: Contains test files for the zkApp, including unit tests for the zkApp methods, integration tests with using local blockchain, lightnet and devnet.
 
-- **`mock.ts`**: Provides mock private keys and public keys for testing purposes for devnet.
+  - **`mock.ts`**: Provides mock private keys and public keys for testing purposes for devnet.
 
-- **`testUtils.ts`**: Contains reusable utility functions for testing, such as generating step proofs or the proof of the whole game.
+  - **`testUtils.ts`**: Contains reusable utility functions for testing, such as generating step proofs or the proof of the whole game.
 
-- **`Mastermind.test.ts`**: Contains integration tests using a `localBlockchain`. These tests validate the zkApp’s behavior in various scenarios, ensuring it functions correctly and securely in a simulated environment.
+  - **`Mastermind.test.ts`**: Contains integration tests using a `localBlockchain`. These tests validate the zkApp’s behavior in various scenarios, ensuring it functions correctly and securely in a simulated environment.
 
-- **`stepProgram.test.ts`**: Contains unit tests for the `StepProgram` methods, ensuring the zkProgram generates proofs correctly and maintains the game state accurately.
+  - **`stepProgram.test.ts`**: Contains unit tests for the `StepProgram` methods, ensuring the zkProgram generates proofs correctly and maintains the game state accurately.
 
-- **`utils.test.ts`**: Provides unit tests for the functions in `utils.ts`, ensuring each logic component works correctly before integration into the zkApp. This helps catch issues early and improves overall reliability.
+  - **`utils.test.ts`**: Provides unit tests for the functions in `utils.ts`, ensuring each logic component works correctly before integration into the zkApp. This helps catch issues early and improves overall reliability.
 
 - **`index.ts`**: Serves as the entry point, importing and exporting all essential smart contract classes for the zkApp(s).
 
