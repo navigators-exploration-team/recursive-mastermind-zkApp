@@ -190,10 +190,10 @@ function compressTurnCountMaxAttemptSolved(digits: Field[]) {
 }
 
 /**
- * Separates the turn count and max attempt from a single Field value.
+ * Separates the turn count, max attempt, and solved flag from a single Field value.
  *
- * @param value - The Field value to be separated into turn count and max attempt.
- * @returns - An array of two Field elements representing the separated turn count and max attempt.
+ * @param value - The Field value to be separated into `turnCount`, `maxAttempt`, and `isSolved` flag
+ * @returns An array of three Field elements representing the separated turn count, max attempt, and solved flag.
  */
 function separateTurnCountAndMaxAttemptSolved(value: Field) {
   const digits = Provable.witness(Provable.Array(Field, 3), () => {
