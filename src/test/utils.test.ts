@@ -427,12 +427,10 @@ describe('Provable utilities - unit tests', () => {
       codeMasterKey = PrivateKey.random();
       codeMasterSalt = Field.random();
 
-      const proofsEnabled = false;
-
       // Can be changed depending on need.
       secret = secretCombination;
 
-      await StepProgram.compile({ proofsEnabled });
+      await StepProgram.compile();
     });
 
     it('Should generate codeMaster victory proof with random actions', async () => {
