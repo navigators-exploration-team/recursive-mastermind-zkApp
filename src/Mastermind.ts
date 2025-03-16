@@ -391,6 +391,11 @@ class MastermindZkApp extends SmartContract {
       this.rewardFinalizeSlot.getAndRequireEquals()
     );
     this.send({ to: claimer, amount: rewardAmount });
+
+    // Set the reward amount to 0
+    this.rewardFinalizeSlot.set(
+      compressRewardAndFinalizeSlot(UInt64.zero, UInt32.zero)
+    );
   }
 
   /**
