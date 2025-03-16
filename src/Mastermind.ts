@@ -112,7 +112,7 @@ class MastermindZkApp extends SmartContract {
     const currentSlot = this.network.globalSlotSinceGenesis.get();
     this.network.globalSlotSinceGenesis.requireBetween(
       currentSlot,
-      finalizeSlot
+      finalizeSlot.sub(UInt32.from(1))
     );
 
     currentSlot.assertLessThan(
