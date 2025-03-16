@@ -11,10 +11,6 @@ src
 keys
 
 node_modules
+coverage
 
 .github
-
-mastermind-board.png
-Mastermind.png
-README.md
-
