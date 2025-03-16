@@ -2,7 +2,7 @@
 
 # Mina Mastermind
 
-![alt text](./mastermind-board.png)
+![alt text](./mastermind-board.webp)
 
 # Table of Contents
 
@@ -105,7 +105,7 @@ Following the game rules, the [MastermindZkApp](./src/Mastermind.ts) should be d
 
 - The game continues by alternating between `makeGuess` and `giveClue` methods until the Code Breaker either uncovers the secret combination or fails by exceeding the allowed `maxAttempts`, concluding the game.
 
-![MastermindZkAppImage](./Mastermind.png)
+![MastermindZkAppImage](./Mastermind.svg)
 
 Now, let's dive deeper into the states and methods of our Mastermind zkApp.
 
@@ -409,6 +409,22 @@ TEST_ENV=lightnet LOGS_ENABLED=0 npm run test
 
 # devnet mode with logs enabled
 TEST_ENV=devnet LOGS_ENABLED=1 npm run test
+```
+
+## How to run benchmark
+
+### For NodeJS
+
+```sh
+npm run benchmark
+```
+
+### For Browser
+
+```sh
+cd src/benchmark/browser
+npm install
+npm run dev
 ```
 
 ## How to run coverage
