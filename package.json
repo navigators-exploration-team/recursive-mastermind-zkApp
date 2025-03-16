@@ -1,8 +1,8 @@
 {
-  "name": "mina-mastermind",
+  "name": "@navigators-exploration-team/mina-mastermind",
   "version": "0.1.0",
   "description": "",
-  "author": "",
+  "author": "navigators-exploration-team",
   "license": "Apache-2.0",
   "keywords": [
     "mina-zkapp",

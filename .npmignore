@@ -9,3 +9,12 @@ src
 
 # Never reveal your keys!
 keys
+
+node_modules
+
+.github
+
+mastermind-board.png
+Mastermind.png
+README.md
+
