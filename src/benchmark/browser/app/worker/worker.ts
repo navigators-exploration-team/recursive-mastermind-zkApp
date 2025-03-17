@@ -7,6 +7,7 @@ import {
   Mina,
   PrivateKey,
   Signature,
+  Poseidon,
 } from 'o1js';
 import { StepProgram } from '../../../../../build/src/stepProgram';
 import { MastermindZkApp } from '../../../../../build/src/Mastermind';
@@ -14,6 +15,7 @@ import {
   checkIfSolved,
   compressCombinationDigits,
   deserializeClue,
+  separateCombinationDigits,
 } from '../../../../../build/src/utils';
 
 const state = {
@@ -140,16 +142,16 @@ const functions = {
 
     console.log('Base Game');
     start = performance.now();
+
+    if (!state.unseparatedSecretCombination || !state.codeMasterSalt) {
+      throw new Error('Secret combination or code master salt not initialized');
+    }
+
     let { proof } = await StepProgram.createGame(
-      {
-        authPubKey: state.codeMasterPubKey!,
-        authSignature: Signature.create(state.codeMasterKey!, [
-          state.unseparatedSecretCombination!,
-          state.codeMasterSalt!,
-        ]),
-      },
-      state.unseparatedSecretCombination!,
-      state.codeMasterSalt!
+      Poseidon.hash([
+        ...separateCombinationDigits(state.unseparatedSecretCombination),
+        state.codeMasterSalt,
+      ])
     );
     end = performance.now();
     state.benchmarkResults.baseGameSeconds = (end - start) / 1000;

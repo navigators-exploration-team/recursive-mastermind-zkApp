@@ -624,9 +624,7 @@ describe('Mastermind ZkApp Tests', () => {
 
     // Base case: Create a new game
     wrongProof = await StepProgramCreateGame(
-      secretCombination,
-      codeMasterSalt,
-      codeMasterKey
+      Poseidon.hash([...secretCombination.map(Field), codeMasterSalt])
     );
 
     // Make a guess with wrong answer
@@ -794,9 +792,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       // 1. createGame
       partialProof = await StepProgramCreateGame(
-        secretCombination,
-        codeMasterSalt,
-        codeMasterKey
+        Poseidon.hash([...secretCombination.map(Field), codeMasterSalt])
       );
 
       // 2. makeGuess
