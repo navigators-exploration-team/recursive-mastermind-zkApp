@@ -26,12 +26,7 @@ import {
   serializeCombinationHistory,
 } from '../utils';
 
-import { 
-  generateTestProofs,
-  gameGuesses,
-
-  
- } from './testUtils';
+import { generateTestProofs, gameGuesses } from './testUtils';
 
 import { StepProgram, StepProgramProof } from '../stepProgram';
 
