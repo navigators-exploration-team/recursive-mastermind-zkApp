@@ -246,7 +246,9 @@ describe('Mastermind ZkApp Tests', () => {
     } catch (error: any) {
       log(error);
       expect(error.message).toContain(expectedMsg);
+      return;
     }
+    throw new Error('Game initialization should have failed');
   }
 
   /**
@@ -337,7 +339,9 @@ describe('Mastermind ZkApp Tests', () => {
     } catch (error: any) {
       log(error);
       expect(error.message).toContain(expectedMsg);
+      return;
     }
+    throw new Error('Proof submission should have failed');
   }
 
   /**
@@ -404,7 +408,9 @@ describe('Mastermind ZkApp Tests', () => {
     } catch (error: any) {
       log(error);
       expect(error.message).toContain(expectedMsg);
+      return;
     }
+    throw new Error('Claim reward should have failed');
   }
 
   /**
@@ -441,7 +447,9 @@ describe('Mastermind ZkApp Tests', () => {
     } catch (error: any) {
       log(error);
       expect(error.message).toContain(expectedMsg);
+      return;
     }
+    throw new Error('Accept game should have failed');
   }
 
   /**
@@ -548,7 +556,7 @@ describe('Mastermind ZkApp Tests', () => {
   beforeAll(async () => {
     // Compile StepProgram and MastermindZkApp
     await StepProgram.compile({
-      proofsEnabled,
+      // proofsEnabled,
     });
     if (testEnvironment !== 'local') {
       await MastermindZkApp.compile();
@@ -1031,7 +1039,7 @@ describe('Mastermind ZkApp Tests', () => {
 
     beforeEach(async () => {
       await prepareNewGame();
-    }, 10 * 60 * 1000);
+    });
 
     it('Should generate a proof with randomly chosen actions for codeMaster victory and settle.', async () => {
       const rounds = 15;
@@ -1050,8 +1058,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       const publicOutputs = CMVictoryProof.publicOutput;
 
-      // Since game is not solved
-      await expectProofSubmissionToFail(CMVictoryProof);
+      await submitGameProof(CMVictoryProof);
 
       const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
         zkapp.turnCountMaxAttemptsIsSolved.get()
@@ -1093,8 +1100,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       const publicOutputs = CMVictoryProof.publicOutput;
 
-      // Since game is not solved
-      await expectProofSubmissionToFail(CMVictoryProof);
+      await submitGameProof(CMVictoryProof);
 
       const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
         zkapp.turnCountMaxAttemptsIsSolved.get()
@@ -1239,7 +1245,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       const publicOutputs = unsolvedProof.publicOutput;
 
-      await expectProofSubmissionToFail(unsolvedProof);
+      await submitGameProof(unsolvedProof);
 
       const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
         zkapp.turnCountMaxAttemptsIsSolved.get()
@@ -1281,7 +1287,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       const publicOutputs = unsolvedProof.publicOutput;
 
-      await expectProofSubmissionToFail(unsolvedProof);
+      await submitGameProof(unsolvedProof);
 
       const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
         zkapp.turnCountMaxAttemptsIsSolved.get()
