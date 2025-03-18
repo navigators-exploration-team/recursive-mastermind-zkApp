@@ -358,7 +358,11 @@ describe('Mastermind ZkApp Tests', () => {
   /**
    * Helper function to claim reward from codeBreaker or codeMaster.
    */
-  async function claimReward(claimer: PublicKey, claimerKey: PrivateKey) {
+  async function claimReward(
+    claimer: PublicKey,
+    claimerKey: PrivateKey,
+    reimbursed = false
+  ) {
     await fetchAccounts([claimer, zkappAddress]);
     const claimerBalance = Mina.getBalance(claimer);
     const claimRewardTx = await Mina.transaction(
@@ -380,7 +384,9 @@ describe('Mastermind ZkApp Tests', () => {
     const claimerNewBalance = Mina.getBalance(claimer);
     expect(
       Number(claimerNewBalance.toBigInt() - claimerBalance.toBigInt())
-    ).toEqual(2 * REWARD_AMOUNT - (localTest ? 0 : fee));
+    ).toEqual(
+      (reimbursed ? REWARD_AMOUNT : 2 * REWARD_AMOUNT) - (localTest ? 0 : fee)
+    );
   }
 
   /**
@@ -787,8 +793,37 @@ describe('Mastermind ZkApp Tests', () => {
     });
   });
 
+  describe('codeMaster reimbursed reward', () => {
+    beforeAll(async () => {
+      zkappPrivateKey = PrivateKey.random();
+      zkappAddress = zkappPrivateKey.toPublicKey();
+      zkapp = new MastermindZkApp(zkappAddress);
+
+      await deployAndInitializeGame(
+        zkapp,
+        codeMasterKey,
+        zkappPrivateKey,
+        secretCombination,
+        codeMasterSalt,
+        5,
+        refereeKey
+      );
+    });
+
+    beforeEach(() => {
+      log(expect.getState().currentTestName);
+    });
+
+    it('codeMaster reimbursed reward succesfully', async () => {
+      await claimReward(codeMasterPubKey, codeMasterKey, true);
+    });
+
+    // TODO: Add test
+  });
+
   describe('Submitting Correct Game Proof and Claiming Reward', () => {
     beforeAll(async () => {
+      await prepareNewGame();
       // Build a "completedProof" that solves the game
       // This portion uses your StepProgram to create valid proofs off-chain.
 
@@ -899,7 +934,7 @@ describe('Mastermind ZkApp Tests', () => {
   describe('Code Breaker punished for timeout', () => {
     beforeAll(async () => {
       await prepareNewGame();
-    }, 10 * 60 * 1000);
+    });
 
     it('Penalty for codeBreaker', async () => {
       log('Penalty for codeBreaker');
@@ -910,7 +945,7 @@ describe('Mastermind ZkApp Tests', () => {
   describe('Code Master punished for timeout', () => {
     beforeAll(async () => {
       await prepareNewGame();
-    }, 10 * 60 * 1000);
+    });
 
     it('Penalty for codeMaster', async () => {
       log('Penalty for codeMaster');
@@ -921,7 +956,7 @@ describe('Mastermind ZkApp Tests', () => {
   describe('Code Master wins', () => {
     beforeAll(async () => {
       await prepareNewGame();
-    }, 10 * 60 * 1000);
+    });
 
     beforeEach(() => {
       log(expect.getState().currentTestName);
@@ -1011,14 +1046,10 @@ describe('Mastermind ZkApp Tests', () => {
 
     // Skip this test on devnet due to long wait time
     if (testEnvironment !== 'devnet') {
-      it(
-        'Claim reward successfully',
-        async () => {
-          await waitForFinalize();
-          await claimReward(codeMasterPubKey, codeMasterKey);
-        },
-        10 * 60 * 1000
-      );
+      it('Claim reward successfully', async () => {
+        await waitForFinalize();
+        await claimReward(codeMasterPubKey, codeMasterKey);
+      });
     }
   });
 });

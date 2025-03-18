@@ -211,7 +211,7 @@ function separateTurnCountAndMaxAttemptSolved(value: Field) {
  * Combines the reward amount and finalize slot into a single Field value.
  * @param rewardAmount - The amount of reward in `UInt64`.
  * @param finalizeSlot - The slot at which the game will finalize in `UInt32`.
- * @returns - The combined Field element representing the compressed reward amount and finalize slot.
+ * @returns The combined Field element representing the compressed reward amount and finalize slot.
  */
 function compressRewardAndFinalizeSlot(
   rewardAmount: UInt64,

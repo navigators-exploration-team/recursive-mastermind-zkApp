@@ -97,28 +97,26 @@ class MastermindZkApp extends SmartContract {
   };
 
   /**
-   * Checks if the game has been finalized.
-   * @returns `true` if the game has been finalized, `false` otherwise.
+   * Asserts that the game is still ongoing. For internal use only.
    */
-  async isFinalized() {
+  async assertNotFinalized() {
     const { finalizeSlot } = separateRewardAndFinalizeSlot(
       this.rewardFinalizeSlot.getAndRequireEquals()
+    );
+
+    finalizeSlot.assertGreaterThan(
+      UInt32.zero,
+      'The game has not been accepted by the codeBreaker yet!'
     );
 
     const currentSlot = this.network.globalSlotSinceGenesis.get();
     this.network.globalSlotSinceGenesis.requireBetween(
       currentSlot,
-      finalizeSlot
+      finalizeSlot.sub(UInt32.from(1))
     );
 
-    return currentSlot.greaterThanOrEqual(finalizeSlot);
-  }
-
-  /**
-   * Asserts that the game is still ongoing. For internal use only.
-   */
-  async assertNotFinalized() {
-    (await this.isFinalized()).assertFalse(
+    currentSlot.assertLessThan(
+      finalizeSlot,
       'The game has already been finalized!'
     );
   }
@@ -354,7 +352,13 @@ class MastermindZkApp extends SmartContract {
         this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
       );
 
-    const isFinalized = await this.isFinalized();
+    const { finalizeSlot } = separateRewardAndFinalizeSlot(
+      this.rewardFinalizeSlot.getAndRequireEquals()
+    );
+
+    const currentSlot =
+      this.network.globalSlotSinceGenesis.getAndRequireEquals();
+    let isFinalized = currentSlot.greaterThanOrEqual(finalizeSlot);
 
     const claimer = this.sender.getAndRequireSignature();
 
@@ -368,6 +372,8 @@ class MastermindZkApp extends SmartContract {
     const isCodeBreaker = codeBreakerId.equals(computedCodebreakerId);
 
     // Code Master wins if the game is finalized and the codeBreaker has not solved the secret combination yet
+    // Also if game is not accepted by the codeBreaker yet, the finalize slot is remains 0
+    // So code master can use this method to reimburse the reward before the code breaker accepts the game
     const codeMasterWinByFinalize = isSolved.equals(0).and(isFinalized);
     // Code Master wins if the codeBreaker has reached the maximum number of attempts without solving the secret combination
     const codeMasterWinByMaxAttempts = isSolved
@@ -391,6 +397,11 @@ class MastermindZkApp extends SmartContract {
       this.rewardFinalizeSlot.getAndRequireEquals()
     );
     this.send({ to: claimer, amount: rewardAmount });
+
+    // Set the reward amount to 0
+    this.rewardFinalizeSlot.set(
+      compressRewardAndFinalizeSlot(UInt64.zero, UInt32.zero)
+    );
   }
 
   /**

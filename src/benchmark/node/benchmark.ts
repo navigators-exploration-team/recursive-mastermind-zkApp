@@ -6,11 +6,64 @@ import {
   AccountUpdate,
   Signature,
   UInt64,
+  PublicKey,
+  Lightnet,
+  fetchAccount,
 } from 'o1js';
 
 import { StepProgram, StepProgramProof } from '../../stepProgram.js';
 import { performance } from 'perf_hooks';
 import { checkIfSolved, deserializeClue } from '../../utils.js';
+import { players } from '../../test/mock.js';
+
+const logsEnabled = process.env.LOGS_ENABLED === '1';
+const testEnvironment = process.env.TEST_ENV ?? 'local';
+const localTest = testEnvironment === 'local';
+let fee = localTest ? 0 : 1e9;
+
+function log(...args: any[]) {
+  if (logsEnabled) {
+    console.log(...args);
+  }
+}
+
+async function waitTransactionAndFetchAccount(
+  tx: Awaited<ReturnType<typeof Mina.transaction>>,
+  keys: PrivateKey[],
+  accountsToFetch?: PublicKey[]
+) {
+  try {
+    log('proving and sending transaction');
+    await tx.prove();
+    const pendingTransaction = await tx.sign(keys).send();
+
+    log('waiting for transaction to be included in a block');
+    if (!localTest) {
+      log('Hash: ', pendingTransaction.hash);
+      const status = await pendingTransaction.safeWait();
+      if (status.status === 'rejected') {
+        log('Transaction rejected', JSON.stringify(status.errors));
+        throw new Error(
+          'Transaction was rejected: ' + JSON.stringify(status.errors)
+        );
+      }
+
+      if (accountsToFetch) {
+        await fetchAccounts(accountsToFetch);
+      }
+    }
+  } catch (error) {
+    log('error', error);
+    throw error;
+  }
+}
+
+async function fetchAccounts(accounts: PublicKey[]) {
+  if (localTest) return;
+  for (let account of accounts) {
+    await fetchAccount({ publicKey: account });
+  }
+}
 
 async function deployAndInitializeGame(
   zkapp: MastermindZkApp,
@@ -24,30 +77,41 @@ async function deployAndInitializeGame(
   const deployerAccount = codeMasterKey.toPublicKey();
   const refereeAccount = refereeKey.toPublicKey();
 
-  const initTx = await Mina.transaction(deployerAccount, async () => {
-    AccountUpdate.fundNewAccount(deployerAccount);
-    zkapp.deploy();
-    await zkapp.initGame(
-      unseparatedSecretCombination,
-      codeMasterSalt,
-      maxAttempt,
-      refereeAccount,
-      UInt64.from(10000)
-    );
-  });
+  const initTx = await Mina.transaction(
+    {
+      sender: deployerAccount,
+      fee,
+    },
+    async () => {
+      AccountUpdate.fundNewAccount(deployerAccount);
+      zkapp.deploy();
+      await zkapp.initGame(
+        unseparatedSecretCombination,
+        codeMasterSalt,
+        maxAttempt,
+        refereeAccount,
+        UInt64.from(10000)
+      );
+    }
+  );
 
-  await initTx.prove();
-  await initTx.sign([codeMasterKey, zkappPrivateKey]).send();
+  await waitTransactionAndFetchAccount(
+    initTx,
+    [codeMasterKey, zkappPrivateKey],
+    [zkapp.address, codeMasterKey.toPublicKey()]
+  );
 }
 
 async function acceptGame(zkapp: MastermindZkApp, codeBreakerKey: PrivateKey) {
   const codeBreakerPubKey = codeBreakerKey.toPublicKey();
-  const tx = await Mina.transaction(codeBreakerPubKey, async () => {
-    await zkapp.acceptGame();
-  });
+  const tx = await Mina.transaction(
+    { sender: codeBreakerPubKey, fee },
+    async () => {
+      await zkapp.acceptGame();
+    }
+  );
 
-  await tx.prove();
-  await tx.sign([codeBreakerKey]).send();
+  await waitTransactionAndFetchAccount(tx, [codeBreakerKey], [zkapp.address]);
 }
 
 function prettifyAnalyzers(
@@ -243,23 +307,112 @@ async function main() {
 }
 
 async function solveBenchmark(secret: number, steps: Field[]) {
-  const Local = await Mina.LocalBlockchain();
-  Mina.setActiveInstance(Local);
+  let proofsEnabled = false;
+  let MINA_NODE_ENDPOINT: string = '';
+  let MINA_ARCHIVE_ENDPOINT: string = '';
 
-  let codeMasterKey = Local.testAccounts[0].key;
-  let codeMasterPubKey = codeMasterKey.toPublicKey();
-  let codeMasterSalt = Field.random();
+  if (testEnvironment === 'devnet') {
+    MINA_NODE_ENDPOINT = 'https://api.minascan.io/node/devnet/v1/graphql';
+    MINA_ARCHIVE_ENDPOINT = 'https://api.minascan.io/archive/devnet/v1/graphql';
+  } else if (testEnvironment === 'lightnet') {
+    MINA_NODE_ENDPOINT = 'http://127.0.0.1:8080/graphql';
+    MINA_ARCHIVE_ENDPOINT = 'http://127.0.0.1:8282';
+  }
+  // Keys
+  let codeMasterKey: PrivateKey | null = null;
+  let codeBreakerKey: PrivateKey | null = null;
+  let refereeKey: PrivateKey | null = null;
 
-  let codeBreakerKey = Local.testAccounts[1].key;
-  let codeBreakerPubKey = codeBreakerKey.toPublicKey();
+  // Public keys
+  let codeMasterPubKey: PublicKey | null = null;
+  let codeBreakerPubKey: PublicKey | null = null;
+  let refereePubKey: PublicKey | null = null;
 
-  let refereeKey = Local.testAccounts[2].key;
+  // ZkApp
+  let zkappAddress: PublicKey | null = null;
+  let zkappPrivateKey: PrivateKey | null = null;
+  let zkapp: MastermindZkApp | null = null;
 
-  let zkappPrivateKey = PrivateKey.random();
-  let zkappAddress = zkappPrivateKey.toPublicKey();
-  let zkapp = new MastermindZkApp(zkappAddress);
+  // Variables
+  let codeMasterSalt: Field | null = null;
+
+  // Local Mina blockchain
+  let Local: Awaited<ReturnType<typeof Mina.LocalBlockchain>>;
   let unseparatedSecretCombination = Field.from(secret);
   let lastProof: StepProgramProof;
+
+  zkappPrivateKey = PrivateKey.random();
+  zkappAddress = zkappPrivateKey.toPublicKey();
+  zkapp = new MastermindZkApp(zkappAddress);
+
+  codeMasterSalt = Field.random();
+
+  if (testEnvironment === 'local') {
+    // Set up the Mina local blockchain
+    Local = await Mina.LocalBlockchain({ proofsEnabled });
+    Mina.setActiveInstance(Local);
+
+    // Assign local test accounts
+    codeMasterKey = Local.testAccounts[0].key;
+    codeMasterPubKey = codeMasterKey.toPublicKey();
+
+    codeBreakerKey = Local.testAccounts[1].key;
+    codeBreakerPubKey = codeBreakerKey.toPublicKey();
+
+    refereeKey = Local.testAccounts[2].key;
+    refereePubKey = refereeKey.toPublicKey();
+  } else if (testEnvironment === 'devnet') {
+    // Set up the Mina devnet
+    const Network = Mina.Network({
+      mina: MINA_NODE_ENDPOINT,
+      archive: MINA_ARCHIVE_ENDPOINT,
+    });
+
+    Mina.setActiveInstance(Network);
+
+    // Assign devnet test accounts
+    codeMasterKey = players[0][0];
+    codeMasterPubKey = players[0][1];
+
+    codeBreakerKey = players[1][0];
+    codeBreakerPubKey = players[1][1];
+
+    refereeKey = players[2][0];
+    refereePubKey = players[2][1];
+  } else if (testEnvironment === 'lightnet') {
+    // Set up the Mina lightnet
+    const Network = Mina.Network({
+      mina: MINA_NODE_ENDPOINT,
+      archive: MINA_ARCHIVE_ENDPOINT,
+      lightnetAccountManager: 'http://127.0.0.1:8181',
+    });
+
+    Mina.setActiveInstance(Network);
+
+    // Assign lightnet test accounts
+    codeMasterKey = (await Lightnet.acquireKeyPair()).privateKey;
+    codeMasterPubKey = codeMasterKey.toPublicKey();
+
+    codeBreakerKey = (await Lightnet.acquireKeyPair()).privateKey;
+    codeBreakerPubKey = codeBreakerKey.toPublicKey();
+
+    refereeKey = (await Lightnet.acquireKeyPair()).privateKey;
+    refereePubKey = refereeKey.toPublicKey();
+  }
+
+  if (
+    !codeMasterKey ||
+    !codeBreakerKey ||
+    !refereeKey ||
+    !zkappAddress ||
+    !codeMasterSalt
+  ) {
+    throw new Error('Keys were not properly initialized.');
+  }
+
+  if (!codeMasterPubKey || !codeBreakerPubKey || !refereePubKey) {
+    throw new Error('Public keys were not properly initialized.');
+  }
 
   let currentBenchmarkResults: BenchmarkResults = {
     stepLength: steps.length,
@@ -350,14 +503,17 @@ async function solveBenchmark(secret: number, steps: Field[]) {
 
   start = performance.now();
   const submitGameProofTx = await Mina.transaction(
-    codeBreakerKey.toPublicKey(),
+    { sender: codeBreakerKey.toPublicKey(), fee },
     async () => {
       await zkapp.submitGameProof(lastProof);
     }
   );
 
-  await submitGameProofTx.prove();
-  await submitGameProofTx.sign([codeBreakerKey]).send();
+  await waitTransactionAndFetchAccount(
+    submitGameProofTx,
+    [codeBreakerKey],
+    [zkappAddress]
+  );
   end = performance.now();
 
   const deserializedClue = deserializeClue(
