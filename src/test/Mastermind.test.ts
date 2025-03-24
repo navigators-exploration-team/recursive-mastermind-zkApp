@@ -887,8 +887,8 @@ describe('Mastermind ZkApp Tests', () => {
       await expectClaimRewardToFail(intruderPubKey, intruderKey, expectedMsg);
     });
 
-    it('Submit with correct game proof', async () => {
-      await submitGameProof(completedProof, codeBreakerPubKey, true);
+    it('Submit with correct game proof and wrong winner', async () => {
+      await submitGameProof(completedProof, codeMasterPubKey, false);
 
       const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
         zkapp.turnCountMaxAttemptsIsSolved.get()
@@ -925,13 +925,16 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Reject submitting the same proof again', async () => {
-      const expectedMsg =
-        'The game has already been finalized and the reward has been claimed!';
+      const expectedMsg = 'The game secret has already been solved!';
       await expectProofSubmissionToFail(
         completedProof,
         codeBreakerPubKey,
         expectedMsg
       );
+    });
+
+    it('Claim reward successfully', async () => {
+      await claimReward(codeBreakerPubKey, codeBreakerKey);
     });
   });
 
