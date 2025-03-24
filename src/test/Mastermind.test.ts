@@ -673,6 +673,46 @@ describe('Mastermind ZkApp Tests', () => {
     );
 
     secretCombination = [1, 2, 3, 4];
+
+    // Build a "completedProof" that solves the game
+    // This portion uses your StepProgram to create valid proofs off-chain.
+
+    // 1. createGame
+    partialProof = await StepProgramCreateGame(
+      secretCombination,
+      codeMasterSalt,
+      codeMasterKey
+    );
+
+    // 2. makeGuess
+    partialProof = await StepProgramMakeGuess(
+      partialProof,
+      [2, 1, 3, 4],
+      codeBreakerKey
+    );
+
+    // 3. giveClue
+    partialProof = await StepProgramGiveClue(
+      partialProof,
+      secretCombination,
+      codeMasterSalt,
+      codeMasterKey
+    );
+
+    // 4. second guess
+    completedProof = await StepProgramMakeGuess(
+      partialProof,
+      secretCombination,
+      codeBreakerKey
+    );
+
+    // 5. giveClue & final
+    completedProof = await StepProgramGiveClue(
+      completedProof,
+      secretCombination,
+      codeMasterSalt,
+      codeMasterKey
+    );
   });
 
   describe('Deploy & Initialize Flow', () => {
@@ -926,45 +966,6 @@ describe('Mastermind ZkApp Tests', () => {
   describe('Submitting Correct Game Proof and Claiming Reward', () => {
     beforeAll(async () => {
       await prepareNewGame();
-      // Build a "completedProof" that solves the game
-      // This portion uses your StepProgram to create valid proofs off-chain.
-
-      // 1. createGame
-      partialProof = await StepProgramCreateGame(
-        secretCombination,
-        codeMasterSalt,
-        codeMasterKey
-      );
-
-      // 2. makeGuess
-      partialProof = await StepProgramMakeGuess(
-        partialProof,
-        [2, 1, 3, 4],
-        codeBreakerKey
-      );
-
-      // 3. giveClue
-      partialProof = await StepProgramGiveClue(
-        partialProof,
-        secretCombination,
-        codeMasterSalt,
-        codeMasterKey
-      );
-
-      // 4. second guess
-      completedProof = await StepProgramMakeGuess(
-        partialProof,
-        secretCombination,
-        codeBreakerKey
-      );
-
-      // 5. giveClue & final
-      completedProof = await StepProgramGiveClue(
-        completedProof,
-        secretCombination,
-        codeMasterSalt,
-        codeMasterKey
-      );
     });
 
     beforeEach(() => {
