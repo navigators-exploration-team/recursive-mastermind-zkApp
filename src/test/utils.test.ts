@@ -427,13 +427,13 @@ describe('Provable utilities - unit tests', () => {
       codeMasterKey = PrivateKey.random();
       codeMasterSalt = Field.random();
 
-      // const proofsEnabled = false;
+      const proofsEnabled = false;
 
       // Can be changed depending on need.
       secret = secretCombination;
 
       await StepProgram.compile({
-        // proofsEnabled
+        proofsEnabled,
       });
     });
 

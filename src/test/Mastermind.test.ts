@@ -573,7 +573,7 @@ describe('Mastermind ZkApp Tests', () => {
   beforeAll(async () => {
     // Compile StepProgram and MastermindZkApp
     await StepProgram.compile({
-      // proofsEnabled,
+      proofsEnabled,
     });
     if (testEnvironment !== 'local') {
       await MastermindZkApp.compile();
