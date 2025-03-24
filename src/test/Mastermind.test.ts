@@ -320,13 +320,14 @@ describe('Mastermind ZkApp Tests', () => {
    */
   async function expectProofSubmissionToFail(
     proof: StepProgramProof,
+    winnerPubKey: PublicKey,
     expectedMsg?: string
   ) {
     try {
       const tx = await Mina.transaction(
         { sender: codeMasterPubKey, fee },
         async () => {
-          await zkapp.submitGameProof(proof);
+          await zkapp.submitGameProof(proof, winnerPubKey);
         }
       );
 
@@ -340,19 +341,35 @@ describe('Mastermind ZkApp Tests', () => {
   /**
    * Helper function to submit a game proof.
    */
-  async function submitGameProof(proof: StepProgramProof) {
+  async function submitGameProof(
+    proof: StepProgramProof,
+    winnerPubKey: PublicKey,
+    shouldClaim: boolean
+  ) {
+    await fetchAccounts([winnerPubKey, zkappAddress]);
+    const winnerBalance = Mina.getBalance(winnerPubKey);
     const submitGameProofTx = await Mina.transaction(
-      { sender: codeBreakerKey.toPublicKey(), fee },
+      { sender: refereePubKey, fee },
       async () => {
-        await zkapp.submitGameProof(proof);
+        await zkapp.submitGameProof(proof, winnerPubKey ?? codeMasterPubKey);
       }
     );
 
     await waitTransactionAndFetchAccount(
       submitGameProofTx,
-      [codeBreakerKey],
+      [refereeKey],
       [zkappAddress]
     );
+
+    const contractBalance = Mina.getBalance(zkappAddress);
+    expect(Number(contractBalance.toBigInt())).toEqual(
+      shouldClaim ? 0 : 2 * REWARD_AMOUNT
+    );
+
+    const winnerNewBalance = Mina.getBalance(winnerPubKey);
+    expect(
+      Number(winnerNewBalance.toBigInt() - winnerBalance.toBigInt())
+    ).toEqual(shouldClaim ? 2 * REWARD_AMOUNT : 0);
   }
 
   /**
@@ -678,7 +695,11 @@ describe('Mastermind ZkApp Tests', () => {
 
     it('Reject calling submitGameProof method before initGame', async () => {
       const expectedMsg = 'The game has not been initialized yet!';
-      await expectProofSubmissionToFail(wrongProof, expectedMsg);
+      await expectProofSubmissionToFail(
+        wrongProof,
+        codeMasterPubKey,
+        expectedMsg
+      );
     });
 
     it('Reject initGame if maxAttempts > 15', async () => {
@@ -760,7 +781,11 @@ describe('Mastermind ZkApp Tests', () => {
     it('Reject submitGameProof before acceptGame', async () => {
       const expectedMsg =
         'The game has not been accepted by the codeBreaker yet!';
-      await expectProofSubmissionToFail(wrongProof, expectedMsg);
+      await expectProofSubmissionToFail(
+        wrongProof,
+        codeMasterPubKey,
+        expectedMsg
+      );
     });
 
     it('Accept the game successfully', async () => {
@@ -785,7 +810,11 @@ describe('Mastermind ZkApp Tests', () => {
     it('Reject submitting a proof with wrong secret', async () => {
       const expectedMsg =
         'The solution hash is not same as the one stored on-chain!';
-      await expectProofSubmissionToFail(wrongProof, expectedMsg);
+      await expectProofSubmissionToFail(
+        wrongProof,
+        codeBreakerPubKey,
+        expectedMsg
+      );
     });
 
     it('Reject claiming reward before solving', async () => {
@@ -875,7 +904,7 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Submit with correct game proof', async () => {
-      await submitGameProof(completedProof);
+      await submitGameProof(completedProof, codeBreakerPubKey, true);
 
       const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
         zkapp.turnCountMaxAttemptsIsSolved.get()
@@ -912,28 +941,33 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Reject submitting the same proof again', async () => {
-      const expectedMsg = 'The game secret has already been solved!';
-      await expectProofSubmissionToFail(completedProof, expectedMsg);
-    });
-
-    it('Reject reward claim from intruder', async () => {
       const expectedMsg =
-        'You are not the codeMaster or codeBreaker of this game!';
-      await expectClaimRewardToFail(intruderPubKey, intruderKey, expectedMsg);
-    });
-
-    it('Reject codeMaster claim if they lost', async () => {
-      const expectedMsg = 'You are not the winner of this game!';
-      await expectClaimRewardToFail(
-        codeMasterPubKey,
-        codeMasterKey,
+        'The game has already been finalized and the reward has been claimed!';
+      await expectProofSubmissionToFail(
+        completedProof,
+        codeBreakerPubKey,
         expectedMsg
       );
     });
 
-    it('Claim reward', async () => {
-      await claimReward(codeBreakerPubKey, codeBreakerKey);
-    });
+    // it('Reject reward claim from intruder', async () => {
+    //   const expectedMsg =
+    //     'You are not the codeMaster or codeBreaker of this game!';
+    //   await expectClaimRewardToFail(intruderPubKey, intruderKey, expectedMsg);
+    // });
+
+    // it('Reject codeMaster claim if they lost', async () => {
+    //   const expectedMsg = 'You are not the winner of this game!';
+    //   await expectClaimRewardToFail(
+    //     codeMasterPubKey,
+    //     codeMasterKey,
+    //     expectedMsg
+    //   );
+    // });
+
+    // it('Claim reward', async () => {
+    //   await claimReward(codeBreakerPubKey, codeBreakerKey);
+    // });
   });
 
   describe('Code Breaker punished for timeout', () => {
