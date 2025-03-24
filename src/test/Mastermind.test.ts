@@ -1,4 +1,4 @@
-import { GAME_DURATION, MastermindZkApp } from '../Mastermind';
+import { PER_ATTEMPT_GAME_DURATION, MastermindZkApp } from '../Mastermind';
 
 import {
   Field,
@@ -530,7 +530,12 @@ describe('Mastermind ZkApp Tests', () => {
   async function waitForFinalize() {
     if (localTest) {
       // Move the global slot forward
-      Local.incrementGlobalSlot(GAME_DURATION);
+      let [, maxAttempts] = separateTurnCountAndMaxAttemptSolved(
+        zkapp.turnCountMaxAttemptsIsSolved.get()
+      );
+      Local.incrementGlobalSlot(
+        Number(maxAttempts.toBigInt()) * PER_ATTEMPT_GAME_DURATION
+      );
     } else {
       // Wait for the game duration
       await fetchAccount({ publicKey: zkappAddress });
