@@ -728,6 +728,21 @@ describe('Mastermind ZkApp Tests', () => {
       );
     });
 
+    it('Reject initGame if reward amount is 0', async () => {
+      const expectedMsg = 'The reward amount must be greater than zero!';
+      REWARD_AMOUNT = 0;
+      await expectInitializeGameToFail(
+        zkapp,
+        codeMasterKey,
+        secretCombination,
+        codeMasterSalt,
+        5,
+        refereeKey,
+        expectedMsg
+      );
+      REWARD_AMOUNT = 100000;
+    });
+
     it('Initializes the game successfully', async () => {
       const maxAttempts = 5;
       await initializeGame(
@@ -773,7 +788,7 @@ describe('Mastermind ZkApp Tests', () => {
     });
   });
 
-  describe('Accepting a Game', () => {
+  describe('Accepting a Game and Solve', () => {
     beforeEach(() => {
       log(expect.getState().currentTestName);
     });
@@ -822,6 +837,59 @@ describe('Mastermind ZkApp Tests', () => {
       await expectClaimRewardToFail(
         codeBreakerPubKey,
         codeBreakerKey,
+        expectedMsg
+      );
+    });
+
+    it('Reject reward claim from intruder', async () => {
+      const expectedMsg =
+        'You are not the codeMaster or codeBreaker of this game!';
+      await expectClaimRewardToFail(intruderPubKey, intruderKey, expectedMsg);
+    });
+
+    it('Submit with correct game proof', async () => {
+      await submitGameProof(completedProof, codeBreakerPubKey, true);
+
+      const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
+        zkapp.turnCountMaxAttemptsIsSolved.get()
+      );
+
+      expect(turnCount.toBigInt()).toEqual(
+        completedProof.publicOutput.turnCount.toBigInt()
+      );
+      expect(isSolved.toBigInt()).toEqual(1n);
+
+      expect(zkapp.codeBreakerId.get()).toEqual(
+        Poseidon.hash(codeBreakerPubKey.toFields())
+      );
+
+      const expectedGuessHistory = serializeCombinationHistory(
+        [[2, 1, 3, 4], secretCombination].map((digits) =>
+          compressCombinationDigits(digits.map(Field))
+        )
+      );
+
+      expect(zkapp.packedGuessHistory.get().toBigInt()).toEqual(
+        expectedGuessHistory.toBigInt()
+      );
+
+      const expectedClueHistory = serializeClueHistory(
+        [
+          [1, 1, 2, 2],
+          [2, 2, 2, 2],
+        ].map((digits) => serializeClue(digits.map(Field)))
+      );
+      expect(zkapp.packedClueHistory.get().toBigInt()).toEqual(
+        expectedClueHistory.toBigInt()
+      );
+    });
+
+    it('Reject submitting the same proof again', async () => {
+      const expectedMsg =
+        'The game has already been finalized and the reward has been claimed!';
+      await expectProofSubmissionToFail(
+        completedProof,
+        codeBreakerPubKey,
         expectedMsg
       );
     });
@@ -903,71 +971,35 @@ describe('Mastermind ZkApp Tests', () => {
       log(expect.getState().currentTestName);
     });
 
-    it('Submit with correct game proof', async () => {
-      await submitGameProof(completedProof, codeBreakerPubKey, true);
-
-      const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
-        zkapp.turnCountMaxAttemptsIsSolved.get()
-      );
-
-      expect(turnCount.toBigInt()).toEqual(
-        completedProof.publicOutput.turnCount.toBigInt()
-      );
-      expect(isSolved.toBigInt()).toEqual(1n);
-
-      expect(zkapp.codeBreakerId.get()).toEqual(
-        Poseidon.hash(codeBreakerPubKey.toFields())
-      );
-
-      const expectedGuessHistory = serializeCombinationHistory(
-        [[2, 1, 3, 4], secretCombination].map((digits) =>
-          compressCombinationDigits(digits.map(Field))
-        )
-      );
-
-      expect(zkapp.packedGuessHistory.get().toBigInt()).toEqual(
-        expectedGuessHistory.toBigInt()
-      );
-
-      const expectedClueHistory = serializeClueHistory(
-        [
-          [1, 1, 2, 2],
-          [2, 2, 2, 2],
-        ].map((digits) => serializeClue(digits.map(Field)))
-      );
-      expect(zkapp.packedClueHistory.get().toBigInt()).toEqual(
-        expectedClueHistory.toBigInt()
-      );
+    it('Submit with partial game proof', async () => {
+      await submitGameProof(partialProof, codeBreakerPubKey, false);
     });
 
-    it('Reject submitting the same proof again', async () => {
-      const expectedMsg =
-        'The game has already been finalized and the reward has been claimed!';
+    it('Reject submitting the same partial proof again', async () => {
+      const expectedMsg = 'Cannot submit a proof for a previous turn!';
       await expectProofSubmissionToFail(
-        completedProof,
+        partialProof,
         codeBreakerPubKey,
         expectedMsg
       );
     });
 
-    // it('Reject reward claim from intruder', async () => {
-    //   const expectedMsg =
-    //     'You are not the codeMaster or codeBreaker of this game!';
-    //   await expectClaimRewardToFail(intruderPubKey, intruderKey, expectedMsg);
-    // });
+    it('Submit with correct game proof with wrong winner', async () => {
+      await submitGameProof(completedProof, codeMasterPubKey, false);
+    });
 
-    // it('Reject codeMaster claim if they lost', async () => {
-    //   const expectedMsg = 'You are not the winner of this game!';
-    //   await expectClaimRewardToFail(
-    //     codeMasterPubKey,
-    //     codeMasterKey,
-    //     expectedMsg
-    //   );
-    // });
+    it('Reject submitting the same proof again', async () => {
+      const expectedMsg = 'The game secret has already been solved!';
+      await expectProofSubmissionToFail(
+        partialProof,
+        codeBreakerPubKey,
+        expectedMsg
+      );
+    });
 
-    // it('Claim reward', async () => {
-    //   await claimReward(codeBreakerPubKey, codeBreakerKey);
-    // });
+    it('Claim reward', async () => {
+      await claimReward(codeBreakerPubKey, codeBreakerKey);
+    });
   });
 
   describe('Code Breaker punished for timeout', () => {

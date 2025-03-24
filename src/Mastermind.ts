@@ -178,6 +178,11 @@ class MastermindZkApp extends SmartContract {
       'The maximum number of attempts allowed is 15!'
     );
 
+    rewardAmount.assertGreaterThan(
+      UInt64.zero,
+      'The reward amount must be greater than zero!'
+    );
+
     this.turnCountMaxAttemptsIsSolved.set(
       compressTurnCountMaxAttemptSolved([
         Field.from(1), // Turn count starts from 1
