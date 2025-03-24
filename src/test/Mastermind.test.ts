@@ -910,7 +910,7 @@ describe('Mastermind ZkApp Tests', () => {
   describe('Code Breaker punished for timeout', () => {
     beforeAll(async () => {
       await prepareNewGame();
-    }, 10 * 60 * 1000);
+    });
 
     it('Penalty for codeBreaker', async () => {
       log('Penalty for codeBreaker');
@@ -921,7 +921,7 @@ describe('Mastermind ZkApp Tests', () => {
   describe('Code Master punished for timeout', () => {
     beforeAll(async () => {
       await prepareNewGame();
-    }, 10 * 60 * 1000);
+    });
 
     it('Penalty for codeMaster', async () => {
       log('Penalty for codeMaster');
@@ -932,7 +932,7 @@ describe('Mastermind ZkApp Tests', () => {
   describe('Code Master wins', () => {
     beforeAll(async () => {
       await prepareNewGame();
-    }, 10 * 60 * 1000);
+    });
 
     beforeEach(() => {
       log(expect.getState().currentTestName);
@@ -1022,14 +1022,10 @@ describe('Mastermind ZkApp Tests', () => {
 
     // Skip this test on devnet due to long wait time
     if (testEnvironment !== 'devnet') {
-      it(
-        'Claim reward successfully',
-        async () => {
-          await waitForFinalize();
-          await claimReward(codeMasterPubKey, codeMasterKey);
-        },
-        10 * 60 * 1000
-      );
+      it('Claim reward successfully', async () => {
+        await waitForFinalize();
+        await claimReward(codeMasterPubKey, codeMasterKey);
+      });
     }
   });
   describe('StepProgramProof settlements tests', () => {
