@@ -38,6 +38,6 @@
     "typescript": "^5.1"
   },
   "peerDependencies": {
-    "o1js": "2.*"
+    "o1js": "^2.3.0"
   }
 }
