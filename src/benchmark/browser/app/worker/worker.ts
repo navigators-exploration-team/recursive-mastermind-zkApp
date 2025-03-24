@@ -199,7 +199,7 @@ const functions = {
     const submitGameProofTx = await Mina.transaction(
       state.codeBreakerKey!.toPublicKey(),
       async () => {
-        await state.zkapp!.submitGameProof(proof);
+        await state.zkapp!.submitGameProof(proof, state.codeBreakerPubKey!);
       }
     );
 

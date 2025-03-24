@@ -505,7 +505,7 @@ async function solveBenchmark(secret: number, steps: Field[]) {
   const submitGameProofTx = await Mina.transaction(
     { sender: codeBreakerKey.toPublicKey(), fee },
     async () => {
-      await zkapp.submitGameProof(lastProof);
+      await zkapp.submitGameProof(lastProof, codeBreakerPubKey);
     }
   );
 
