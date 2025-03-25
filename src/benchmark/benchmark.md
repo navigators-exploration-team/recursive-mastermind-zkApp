@@ -39,8 +39,8 @@ This report summarizes the circuit analysis, compilation times, and per-step ben
 
 | Name          | NodeJS Compilation Time | Browser Compilation Time |
 | ------------- | ----------------------- | ------------------------ |
-| stepProgram   | 13.46s                  | 34.01s                   |
-| MastermindApp | 8.60s                   | 14.86s                   |
+| stepProgram   | 13.46s                  | 51.98s                   |
+| MastermindApp | 8.60s                   | 21.02s                   |
 
 ## Step-wise Benchmark Results (Local Mina Network)
 
@@ -117,6 +117,14 @@ Based on the benchmark results, average taken from executed 62 steps ın both en
 
 | Step Length | Solved | Deploy & Initialize Avg | Accept Game | Base Proof Avg | Make Guess Avg | Submit Game Proof | Total Time |
 | ----------- | ------ | ----------------------- | ----------- | -------------- | -------------- | ----------------- | ---------- |
+| 1           | Yes    | 160.681                 | 200.512     | 14.859         | 19.062         | 309.264           | 723.680    |
+| 1           | No     | 535.054                 | 161.901     | 17.218         | 22.129         | 126.104           | 882.741    |
+| 5           | Yes    | 552.822                 | 182.921     | 14.965         | 19.509         | 313.621           | 1259.638   |
+| 5           | No     | 204.592                 | 164.484     | 14.801         | 19.305         | 315.095           | 892.911    |
+| 10          | Yes    | 183.039                 | 181.841     | 14.768         | 19.822         | 334.276           | 1108.860   |
+| 10          | No     | 183.821                 | 323.537     | 14.502         | 18.867         | 350.222           | 1247.992   |
+| 15          | Yes    | 198.983                 | 183.503     | 15.593         | 20.088         | 268.805           | 1269.193   |
+| 15          | No     | 182.535                 | 345.857     | 14.756         | 19.693         | 125.274           | 1261.521   |
 
 ## Overall Scores
 
@@ -136,8 +144,15 @@ Based on the benchmark results, average taken from executed 62 steps ın both en
 
 ### Browser Environment
 
-| Metric | Solved Games | Unsolved Games |
-| ------ | ------------ | -------------- |
+| Metric                        | Solved Games       | Unsolved Games     |
+| ----------------------------- | ------------------ | ------------------ |
+| Avg Time Each Game Step       | 84.61289699999888  | 84.10140433333316  |
+| Avg Deploy & Initialize Time  | 198.98343999999761 | 182.53462000000476 |
+| Avg Accept Game Time          | 183.50275499999523 | 345.85669500000773 |
+| Avg Time To Create Base Proof | 15.593405000001193 | 14.756024999991059 |
+| Avg Make Guess Time           | 20.088185666667417 | 19.693103666668136 |
+| Avg Give Clue Time            | 20.065748999998966 | 19.84685266666412  |
+| Avg Submit Game Proof Time    | 268.80483499999343 | 125.27438000001013 |
 
 #### Metric Explanations
 
