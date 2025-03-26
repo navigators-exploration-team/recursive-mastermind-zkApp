@@ -26,21 +26,21 @@ This report summarizes the circuit analysis, compilation times, and per-step ben
 
 | Method          | Rows |
 | --------------- | ---- |
-| initGame        | 1219 |
-| acceptGame      | 1085 |
-| submitGameProof | 582  |
-| claimReward     | 1087 |
+| initGame        | 1224 |
+| acceptGame      | 1088 |
+| submitGameProof | 1021 |
+| claimReward     | 1123 |
 | forfeitWin      | 1038 |
-| makeGuess       | 1537 |
-| giveClue        | 2052 |
-| **Total**       | 8600 |
+| makeGuess       | 1539 |
+| giveClue        | 2058 |
+| **Total**       | 9111 |
 
 ### Compilation Times
 
 | Name          | NodeJS Compilation Time | Browser Compilation Time |
 | ------------- | ----------------------- | ------------------------ |
-| stepProgram   | 13.46s                  | 51.98s                   |
-| MastermindApp | 8.60s                   | 21.02s                   |
+| stepProgram   | 13.46s                  | 32.59s                   |
+| MastermindApp | 8.60s                   | 14.69s                   |
 
 ## Step-wise Benchmark Results (Local Mina Network)
 
@@ -117,14 +117,14 @@ Based on the benchmark results, average taken from executed 62 steps ın both en
 
 | Step Length | Solved | Deploy & Initialize Avg | Accept Game | Base Proof Avg | Make Guess Avg | Submit Game Proof | Total Time |
 | ----------- | ------ | ----------------------- | ----------- | -------------- | -------------- | ----------------- | ---------- |
-| 1           | Yes    | 160.681                 | 200.512     | 14.859         | 19.062         | 309.264           | 723.680    |
-| 1           | No     | 535.054                 | 161.901     | 17.218         | 22.129         | 126.104           | 882.741    |
-| 5           | Yes    | 552.822                 | 182.921     | 14.965         | 19.509         | 313.621           | 1259.638   |
-| 5           | No     | 204.592                 | 164.484     | 14.801         | 19.305         | 315.095           | 892.911    |
-| 10          | Yes    | 183.039                 | 181.841     | 14.768         | 19.822         | 334.276           | 1108.860   |
-| 10          | No     | 183.821                 | 323.537     | 14.502         | 18.867         | 350.222           | 1247.992   |
-| 15          | Yes    | 198.983                 | 183.503     | 15.593         | 20.088         | 268.805           | 1269.193   |
-| 15          | No     | 182.535                 | 345.857     | 14.756         | 19.693         | 125.274           | 1261.521   |
+| 1           | Yes    | 178.132                 | 339.139     | 9.406          | 12.731         | 877.113           | 1429.077   |
+| 1           | No     | 176.599                 | 175.607     | 9.542          | 12.418         | 158.727           | 545.600    |
+| 5           | Yes    | 360.231                 | 154.863     | 9.195          | 12.588         | 608.630           | 1258.387   |
+| 5           | No     | 360.208                 | 175.108     | 9.729          | 13.007         | 383.504           | 1059.092   |
+| 10          | Yes    | 542.427                 | 196.803     | 9.650          | 12.846         | 97.223            | 1103.417   |
+| 10          | No     | 156.750                 | 567.421     | 9.817          | 12.853         | 56.897            | 1048.866   |
+| 15          | Yes    | 196.594                 | 197.256     | 9.603          | 12.811         | 322.390           | 1109.730   |
+| 15          | No     | 175.368                 | 362.397     | 9.898          | 13.056         | 138.268           | 1078.710   |
 
 ## Overall Scores
 
@@ -146,13 +146,13 @@ Based on the benchmark results, average taken from executed 62 steps ın both en
 
 | Metric                        | Solved Games       | Unsolved Games     |
 | ----------------------------- | ------------------ | ------------------ |
-| Avg Time Each Game Step       | 84.61289699999888  | 84.10140433333316  |
-| Avg Deploy & Initialize Time  | 198.98343999999761 | 182.53462000000476 |
-| Avg Accept Game Time          | 183.50275499999523 | 345.85669500000773 |
-| Avg Time To Create Base Proof | 15.593405000001193 | 14.756024999991059 |
-| Avg Make Guess Time           | 20.088185666667417 | 19.693103666668136 |
-| Avg Give Clue Time            | 20.065748999998966 | 19.84685266666412  |
-| Avg Submit Game Proof Time    | 268.80483499999343 | 125.27438000001013 |
+| Avg Time Each Game Step       | 158.08422709677203 | 120.395720483877   |
+| Avg Deploy & Initialize Time  | 319.3461062499955  | 217.23107000000027 |
+| Avg Accept Game Time          | 222.01542499999704 | 320.133256249994   |
+| Avg Time To Create Base Proof | 9.463508750006557  | 9.746540000006556  |
+| Avg Make Guess Time           | 12.78392225806367  | 12.962174193551464 |
+| Avg Give Clue Time            | 12.763024193547427 | 13.051643064518126 |
+| Avg Submit Game Proof Time    | 476.33888499999796 | 184.34888375000656 |
 
 #### Metric Explanations
 
