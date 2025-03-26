@@ -248,6 +248,11 @@ class MastermindZkApp extends SmartContract {
       this.rewardFinalizeSlot.getAndRequireEquals()
     );
 
+    rewardAmount.assertGreaterThan(
+      UInt64.zero,
+      'Code master reimbursement is already claimed!'
+    );
+
     const sender = this.sender.getUnconstrained();
     const codeBreakerUpdate = AccountUpdate.createSigned(sender);
     codeBreakerUpdate.send({ to: this.address, amount: rewardAmount });

@@ -243,7 +243,9 @@ describe('Mastermind ZkApp Tests', () => {
     } catch (error: any) {
       log(error);
       expect(error.message).toContain(expectedMsg);
+      return;
     }
+    throw new Error('Initialization should have failed');
   }
 
   /**
@@ -335,7 +337,9 @@ describe('Mastermind ZkApp Tests', () => {
     } catch (error: any) {
       log(error);
       expect(error.message).toContain(expectedMsg);
+      return;
     }
+    throw new Error('Proof submission should have failed');
   }
 
   /**
@@ -424,7 +428,9 @@ describe('Mastermind ZkApp Tests', () => {
     } catch (error: any) {
       log(error);
       expect(error.message).toContain(expectedMsg);
+      return;
     }
+    throw new Error('Claim reward should have failed');
   }
 
   /**
@@ -461,7 +467,9 @@ describe('Mastermind ZkApp Tests', () => {
     } catch (error: any) {
       log(error);
       expect(error.message).toContain(expectedMsg);
+      return;
     }
+    throw new Error('Accept game should have failed');
   }
 
   /**
@@ -484,6 +492,28 @@ describe('Mastermind ZkApp Tests', () => {
   }
 
   /**
+   * Helper function to expect make guess to fail.
+   */
+  async function expectMakeGuessToFail(
+    player: PublicKey,
+    playerKey: PrivateKey,
+    unseparatedGuess: Field,
+    expectedMsg?: string
+  ) {
+    try {
+      const tx = await Mina.transaction({ sender: player, fee }, async () => {
+        await zkapp.makeGuess(unseparatedGuess);
+      });
+      await waitTransactionAndFetchAccount(tx, [playerKey]);
+    } catch (error: any) {
+      log(error);
+      expect(error.message).toContain(expectedMsg);
+      return;
+    }
+    throw new Error('Make guess should have failed');
+  }
+
+  /**
    * Helper function to give a clue.
    */
   async function giveClue(
@@ -498,6 +528,29 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     await waitTransactionAndFetchAccount(clueTx, [playerKey], [zkappAddress]);
+  }
+
+  /**
+   * Helper function to expect give clue to fail.
+   */
+  async function expectGiveClueToFail(
+    player: PublicKey,
+    playerKey: PrivateKey,
+    unseparatedCombination: Field,
+    salt: Field,
+    expectedMsg?: string
+  ) {
+    try {
+      const tx = await Mina.transaction({ sender: player, fee }, async () => {
+        await zkapp.giveClue(unseparatedCombination, salt);
+      });
+      await waitTransactionAndFetchAccount(tx, [playerKey]);
+    } catch (error: any) {
+      log(error);
+      expect(error.message).toContain(expectedMsg);
+      return;
+    }
+    throw new Error('Give clue should have failed');
   }
 
   /**
@@ -783,6 +836,27 @@ describe('Mastermind ZkApp Tests', () => {
       REWARD_AMOUNT = 100000;
     });
 
+    it('Reject makeGuess before initGame', async () => {
+      const expectedMsg = 'The game has not been initialized yet!';
+      await expectMakeGuessToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        compressCombinationDigits([2, 1, 3, 4].map(Field)),
+        expectedMsg
+      );
+    });
+
+    it('Reject giveClue before initGame', async () => {
+      const expectedMsg = 'The game has not been initialized yet!';
+      await expectGiveClueToFail(
+        codeMasterPubKey,
+        codeMasterKey,
+        compressCombinationDigits([2, 1, 3, 4].map(Field)),
+        codeMasterSalt,
+        expectedMsg
+      );
+    });
+
     it('Initializes the game successfully', async () => {
       const maxAttempts = 5;
       await initializeGame(
@@ -839,6 +913,29 @@ describe('Mastermind ZkApp Tests', () => {
       await expectProofSubmissionToFail(
         wrongProof,
         codeMasterPubKey,
+        expectedMsg
+      );
+    });
+
+    it('Reject makeGuess before acceptGame', async () => {
+      const expectedMsg =
+        'The game has not been accepted by the codeBreaker yet!';
+      await expectMakeGuessToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        compressCombinationDigits([2, 1, 3, 4].map(Field)),
+        expectedMsg
+      );
+    });
+
+    it('Reject giveClue before acceptGame', async () => {
+      const expectedMsg =
+        'The game has not been accepted by the codeBreaker yet!';
+      await expectGiveClueToFail(
+        codeMasterPubKey,
+        codeMasterKey,
+        compressCombinationDigits([2, 1, 3, 4].map(Field)),
+        codeMasterSalt,
         expectedMsg
       );
     });
@@ -963,7 +1060,14 @@ describe('Mastermind ZkApp Tests', () => {
       await claimReward(codeMasterPubKey, codeMasterKey, true);
     });
 
-    // TODO: Add test
+    it('Reject accepting the game after reimbursed', async () => {
+      const expectedMsg = 'Code master reimbursement is already claimed!';
+      await expectAcceptGameToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        expectedMsg
+      );
+    });
   });
 
   describe('Submitting Correct Game Proof and Claiming Reward', () => {
