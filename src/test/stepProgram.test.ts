@@ -14,6 +14,8 @@ import {
   StepProgramMakeGuess,
 } from './testUtils';
 
+const proofsEnabled = false;
+
 describe('Mastermind ZkProgram Tests', () => {
   // Global variables
   let codeMasterKey: PrivateKey;
@@ -34,7 +36,7 @@ describe('Mastermind ZkProgram Tests', () => {
 
   beforeAll(async () => {
     // Compile the ZkProgram before tests
-    await StepProgram.compile();
+    await StepProgram.compile({ proofsEnabled });
 
     // Create codeMaster keys & derive ID
     codeMasterKey = PrivateKey.random();
