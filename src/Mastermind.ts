@@ -365,7 +365,7 @@ class MastermindZkApp extends SmartContract {
 
     const codeMasterWinByMaxAttempts = isSolved
       .equals(0)
-      .and(turnCount.greaterThanOrEqual(maxAttempts.mul(2)));
+      .and(proof.publicOutput.turnCount.greaterThanOrEqual(maxAttempts.mul(2)));
 
     const codeBreakerWin = isSolved.equals(1);
 

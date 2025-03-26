@@ -302,7 +302,7 @@ describe('Mastermind ZkApp Tests', () => {
   /**
    * Prepare a new game.
    */
-  async function prepareNewGame() {
+  async function prepareNewGame(maxAttempts: number = 7) {
     zkappPrivateKey = PrivateKey.random();
     zkappAddress = zkappPrivateKey.toPublicKey();
     zkapp = new MastermindZkApp(zkappAddress);
@@ -313,7 +313,7 @@ describe('Mastermind ZkApp Tests', () => {
       zkappPrivateKey,
       secretCombination,
       codeMasterSalt,
-      7,
+      maxAttempts,
       refereeKey
     );
 
@@ -1260,7 +1260,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       const publicOutputs = CMVictoryProof.publicOutput;
 
-      await submitGameProof(CMVictoryProof);
+      await submitGameProof(CMVictoryProof, codeMasterPubKey, true);
 
       const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
         zkapp.turnCountMaxAttemptsIsSolved.get()
@@ -1281,7 +1281,6 @@ describe('Mastermind ZkApp Tests', () => {
         codeBreakerKey,
         expectedMsg
       );
-      await claimReward(codeMasterPubKey, codeMasterKey);
     });
 
     it('Should generate a proof with predefined actions for codeMaster victory and settle.', async () => {
@@ -1302,7 +1301,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       const publicOutputs = CMVictoryProof.publicOutput;
 
-      await submitGameProof(CMVictoryProof);
+      await submitGameProof(CMVictoryProof, codeMasterPubKey, true);
 
       const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
         zkapp.turnCountMaxAttemptsIsSolved.get()
@@ -1333,7 +1332,6 @@ describe('Mastermind ZkApp Tests', () => {
         codeBreakerKey,
         expectedMsg
       );
-      await claimReward(codeMasterPubKey, codeMasterKey);
     });
 
     it('Should generate a proof with randomly chosen actions for codeBreaker victory and settle.', async () => {
@@ -1351,7 +1349,7 @@ describe('Mastermind ZkApp Tests', () => {
         codeMasterKey
       );
 
-      await submitGameProof(CBVictoryProof);
+      await submitGameProof(CBVictoryProof, codeBreakerPubKey, true);
 
       const publicOutputs = CBVictoryProof.publicOutput;
 
@@ -1374,7 +1372,6 @@ describe('Mastermind ZkApp Tests', () => {
         codeMasterKey,
         expectedMsg
       );
-      await claimReward(codeBreakerPubKey, codeBreakerKey);
     });
 
     it('Should generate a proof with predefined actions for codeBreaker victory and settle.', async () => {
@@ -1393,7 +1390,7 @@ describe('Mastermind ZkApp Tests', () => {
         gameGuesses
       );
 
-      await submitGameProof(CBVictoryProof);
+      await submitGameProof(CBVictoryProof, codeBreakerPubKey, true);
 
       const publicOutputs = CBVictoryProof.publicOutput;
 
@@ -1428,7 +1425,6 @@ describe('Mastermind ZkApp Tests', () => {
         codeMasterKey,
         expectedMsg
       );
-      await claimReward(codeBreakerPubKey, codeBreakerKey);
     });
 
     it('Should generate a proof with randomly chosen actions for unsolved game and fail to settle.', async () => {
@@ -1447,7 +1443,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       const publicOutputs = unsolvedProof.publicOutput;
 
-      await submitGameProof(unsolvedProof);
+      await submitGameProof(unsolvedProof, codeBreakerPubKey, false);
 
       const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
         zkapp.turnCountMaxAttemptsIsSolved.get()
@@ -1489,7 +1485,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       const publicOutputs = unsolvedProof.publicOutput;
 
-      await submitGameProof(unsolvedProof);
+      await submitGameProof(unsolvedProof, codeBreakerPubKey, false);
 
       const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
         zkapp.turnCountMaxAttemptsIsSolved.get()
