@@ -9,3 +9,8 @@ src
 
 # Never reveal your keys!
 keys
+
+node_modules
+coverage
+
+.github
