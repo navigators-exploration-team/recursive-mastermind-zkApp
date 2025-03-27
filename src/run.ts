@@ -25,6 +25,15 @@ const gameGuesses = {
     ],
 };
 
+function YatesFisherShuffle(array: number[]) {
+    let shuffledArray = [...array];
+    for (let i = shuffledArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledArray[i], shuffledArray[j]] = [shuffledArray[j], shuffledArray[i]];
+    }
+    return shuffledArray;
+};
+
 function currentGameClue(guess: number[], solution: number[]) {
     let clue = Array.from({ length: 4 }, () => 0);
 
@@ -56,6 +65,24 @@ function summedGameClue(guess: number[], solution: number[]) {
     }
     return clue.reduce((acc, curr) => acc + curr, 0);
 }
+
+function shuffledGameClue(guess: number[], solution: number[]) {
+    let clue = Array.from({ length: 4 }, () => 0);
+
+    for (let i = 0; i < 4; i++) {
+        for (let j = 0; j < 4; j++) {
+            const isEqual = Number(guess[i] === solution[j]);
+            if (i === j) {
+                clue[i] = clue[i] + 2 * isEqual; // 2 for a hit (correct digit and position)
+            } else {
+                clue[i] = clue[i] + isEqual; // 1 for a blow (correct digit, wrong position)
+            }
+        }
+    }
+
+    return YatesFisherShuffle(clue);
+};
+
 
 function classicalGameClue(guess: number[], solution: number[]) {
     let clue = {
@@ -132,6 +159,26 @@ const classicalGame = () => {
     });
 };
 
+const shuffledClueGame = () => {
+    rl.question('Enter a guess (4 digits): ', (answer) => {
+        console.log(`You entered: '${answer}'`);
+
+        const guess = answer.split('').map((char) => Number(char));
+
+        const clue = shuffledGameClue(guess, secret);
+
+        console.log(`Clue is: ${clue.join(' ')}`);
+        // If all positions match, end the game
+        if (clue.join('') === '2222') {
+            console.log('Congratulations! You guessed the secret!');
+            rl.close();
+        } else {
+            // Continue asking for the next guess
+            shuffledClueGame();
+        }
+    });
+};
+
 const currentGame = () => {
     rl.question('Enter a guess (4 digits): ', (answer) => {
         console.log(`You entered: '${answer}'`);
@@ -158,6 +205,9 @@ process.stdout.write('Start\n');
 
 // currentGame();
 // classicalGame();
-summedGame();
+// summedGame();
+shuffledClueGame();
+
+
 
 
