@@ -1,7 +1,6 @@
 
 import * as readline from 'readline';
 
-
 const gameGuesses = {
     totalAttempts: [
         [2, 1, 3, 4],
@@ -42,14 +41,60 @@ function currentGameClue(guess: number[], solution: number[]) {
     return clue;
 }
 
+function classicalGameClue(guess: number[], solution: number[]) {
+    let clue = {
+        hit: 0,
+        blow: 0,
+    };
+
+    const solutionUsed = Array(4).fill(false);
+    const guessUsed = Array(4).fill(false);
+
+    for (let i = 0; i < 4; i++) {
+        if (guess[i] === solution[i]) {
+            clue.hit++;
+            guessUsed[i] = true;
+            solutionUsed[i] = true;
+        }
+    }
+    for (let i = 0; i < 4; i++) {
+        if (guessUsed[i]) continue;
+        for (let j = 0; j < 4; j++) {
+            if (solutionUsed[j]) continue;
+            if (guess[i] === solution[j]) {
+                clue.blow++;
+                solutionUsed[j] = true;
+                break;
+            }
+        }
+    }
+    return clue;
+}
+
+
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
 });
 
-const secret: number[] = gameGuesses.totalAttempts[8];
+const classicalGame = () => {
+    rl.question('Enter a guess (4 digits): ', (answer) => {
+        console.log(`You entered: '${answer}'`);
 
-process.stdout.write('Start\n');
+        const guess = answer.split('').map((char) => Number(char));
+
+        const clue = classicalGameClue(guess, secret);
+
+        console.log(`Clue: hits: ${clue.hit}, blows: ${clue.blow} `);
+        if (clue.hit === 4) {
+            console.log('Congratulations! You guessed the secret!');
+            rl.close();
+        } else {
+            // Continue asking for the next guess
+            classicalGame();
+        }
+    });
+};
 
 const currentGame = () => {
     rl.question('Enter a guess (4 digits): ', (answer) => {
@@ -71,6 +116,11 @@ const currentGame = () => {
     });
 };
 
-currentGame();
+const secret: number[] = gameGuesses.totalAttempts[8];
+
+process.stdout.write('Start\n');
+
+// currentGame();
+classicalGame();
 
 
