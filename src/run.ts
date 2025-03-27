@@ -41,6 +41,22 @@ function currentGameClue(guess: number[], solution: number[]) {
     return clue;
 }
 
+function summedGameClue(guess: number[], solution: number[]) {
+    let clue = Array.from({ length: 4 }, () => 0);
+
+    for (let i = 0; i < 4; i++) {
+        for (let j = 0; j < 4; j++) {
+            const isEqual = Number(guess[i] === solution[j]);
+            if (i === j) {
+                clue[i] = clue[i] + 2 * isEqual; // 2 for a hit (correct digit and position)
+            } else {
+                clue[i] = clue[i] + isEqual; // 1 for a blow (correct digit, wrong position)
+            }
+        }
+    }
+    return clue.reduce((acc, curr) => acc + curr, 0);
+}
+
 function classicalGameClue(guess: number[], solution: number[]) {
     let clue = {
         hit: 0,
@@ -76,6 +92,26 @@ const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
 });
+
+const summedGame = () => {
+    rl.question('Enter a guess (4 digits): ', (answer) => {
+        console.log(`You entered: '${answer}'`);
+
+        const guess = answer.split('').map((char) => Number(char));
+
+        const clue = summedGameClue(guess, secret);
+
+        console.log(`Clue is: ${clue}`);
+
+        if (clue === 8) {
+            console.log('Congratulations! You guessed the secret!');
+            rl.close();
+        } else {
+            // Continue asking for the next guess
+            summedGame();
+        }
+    });
+};
 
 const classicalGame = () => {
     rl.question('Enter a guess (4 digits): ', (answer) => {
@@ -121,6 +157,7 @@ const secret: number[] = gameGuesses.totalAttempts[8];
 process.stdout.write('Start\n');
 
 // currentGame();
-classicalGame();
+// classicalGame();
+summedGame();
 
 
