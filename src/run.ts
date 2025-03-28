@@ -197,9 +197,15 @@ const rl = readline.createInterface({
  */
 const summedGame = () => {
     rl.question('Enter a guess (4 digits): ', (answer) => {
-        console.log(`You entered: '${answer}'`);
 
-        const guess = answer.split('').map((char) => Number(char));
+        if (!/^\d{4}$/.test(answer)) {
+            console.log('You should enter exactly 4 digits!');
+            currentGame();
+            return;
+        }
+        const guess = answer.split('').map(Number);
+
+        console.log(`You entered: '${answer}'`);
 
         const clue = summedGameClue(guess, secret);
 
@@ -221,13 +227,18 @@ const summedGame = () => {
  */
 const classicalGame = () => {
     rl.question('Enter a guess (4 digits): ', (answer) => {
-        console.log(`You entered: '${answer}'`);
+        if (!/^\d{4}$/.test(answer)) {
+            console.log('You should enter exactly 4 digits!');
+            currentGame();
+            return;
+        }
+        const guess = answer.split('').map(Number);
 
-        const guess = answer.split('').map((char) => Number(char));
+        console.log(`You entered: '${answer}'`);
 
         const clue = classicalGameClue(guess, secret);
 
-        console.log(`Clue: hits: ${clue.hit}, blows: ${clue.blow} `);
+        console.log(`Clue : Hit: ${clue.hit} Blow: ${clue.blow}`);
         if (clue.hit === 4) {
             console.log('Congratulations! You guessed the secret!');
             rl.close();
@@ -244,13 +255,21 @@ const classicalGame = () => {
  */
 const shuffledClueGame = () => {
     rl.question('Enter a guess (4 digits): ', (answer) => {
-        console.log(`You entered: '${answer}'`);
 
-        const guess = answer.split('').map((char) => Number(char));
+        if (!/^\d{4}$/.test(answer)) {
+            console.log('You should enter exactly 4 digits!');
+            currentGame();
+            return;
+        }
+
+        const guess = answer.split('').map(Number);
+
+        console.log(`You entered: '${answer}'`);
 
         const clue = shuffledGameClue(guess, secret);
 
         console.log(`Clue is: ${clue.join(' ')}`);
+
         // If all positions match, end the game
         if (clue.join('') === '2222') {
             console.log('Congratulations! You guessed the secret!');
@@ -268,9 +287,15 @@ const shuffledClueGame = () => {
  */
 const shiftedClueGame = () => {
     rl.question('Enter a guess (4 digits): ', (answer) => {
-        console.log(`You entered: '${answer}'`);
 
-        const guess = answer.split('').map((char) => Number(char));
+        if (!/^\d{4}$/.test(answer)) {
+            console.log('You should enter exactly 4 digits!');
+            currentGame();
+            return;
+        }
+        const guess = answer.split('').map(Number);
+
+        console.log(`You entered: '${answer}'`);
 
         const clue = shiftedGameClue(guess, secret);
 
@@ -292,13 +317,21 @@ const shiftedClueGame = () => {
  */
 const currentGame = () => {
     rl.question('Enter a guess (4 digits): ', (answer) => {
-        console.log(`You entered: '${answer}'`);
 
-        const guess = answer.split('').map((char) => Number(char));
+        if (!/^\d{4}$/.test(answer)) {
+            console.log('You should enter exactly 4 digits!');
+            currentGame();
+            return;
+        }
+
+        const guess = answer.split('').map(Number);
+
+        console.log(`You entered: '${answer}'`);
 
         const clue = currentGameClue(guess, secret);
 
         console.log(`Clue is: ${clue.join(' ')}`);
+
         // If all positions match, end the game
         if (clue.join('') === '2222') {
             console.log('Congratulations! You guessed the secret!');
@@ -316,7 +349,7 @@ process.stdout.write('Start\n');
 
 
 // Comment out one of these to play that game mode.
-// currentGame();
+currentGame();
 // classicalGame();
 // summedGame();
 // shuffledClueGame();
