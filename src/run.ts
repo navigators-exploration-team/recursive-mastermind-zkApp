@@ -348,12 +348,12 @@ const secret: number[] = gameGuesses.totalAttempts[8];
 process.stdout.write('Start\n');
 
 
-// Comment out one of these to play that game mode.
+// Comment out the games you don't want to play.
 currentGame();
-// classicalGame();
-// summedGame();
-// shuffledClueGame();
-// shiftedClueGame();
+classicalGame();
+summedGame();
+shuffledClueGame();
+shiftedClueGame();
 
 
 
