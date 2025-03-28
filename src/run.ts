@@ -1,31 +1,30 @@
-
 import * as readline from 'readline';
 /**
  * predefined game guesses. Don't memorize them to play a fair game please!
  */
 
 const gameGuesses = {
-    totalAttempts: [
-        [2, 1, 3, 4],
-        [8, 3, 7, 1],
-        [3, 5, 8, 2],
-        [2, 8, 3, 5],
-        [5, 8, 3, 2],
-        [5, 3, 7, 2],
-        [5, 3, 8, 1],
-        [3, 1, 7, 2],
-        [5, 4, 8, 2],
-        [5, 3, 6, 2],
-        [5, 3, 8, 9],
-        [5, 3, 8, 2],
-        [7, 3, 8, 2],
-        [5, 2, 8, 3],
-        [8, 3, 5, 2],
-        [8, 3, 3, 2],
-        [7, 1, 3, 8],
-        [4, 3, 5, 2],
-        [4, 7, 3, 1],
-    ],
+  totalAttempts: [
+    [2, 1, 3, 4],
+    [8, 3, 7, 1],
+    [3, 5, 8, 2],
+    [2, 8, 3, 5],
+    [5, 8, 3, 2],
+    [5, 3, 7, 2],
+    [5, 3, 8, 1],
+    [3, 1, 7, 2],
+    [5, 4, 8, 2],
+    [5, 3, 6, 2],
+    [5, 3, 8, 9],
+    [5, 3, 8, 2],
+    [7, 3, 8, 2],
+    [5, 2, 8, 3],
+    [8, 3, 5, 2],
+    [8, 3, 3, 2],
+    [7, 1, 3, 8],
+    [4, 3, 5, 2],
+    [4, 7, 3, 1],
+  ],
 };
 
 /**
@@ -35,13 +34,13 @@ const gameGuesses = {
  * @returns A randomly shuffled version of the clue
  */
 function FisherYatesShuffle(clue: number[]) {
-    let shuffledArray = [...clue];
-    for (let i = shuffledArray.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffledArray[i], shuffledArray[j]] = [shuffledArray[j], shuffledArray[i]];
-    }
-    return shuffledArray;
-};
+  let shuffledArray = [...clue];
+  for (let i = shuffledArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffledArray[i], shuffledArray[j]] = [shuffledArray[j], shuffledArray[i]];
+  }
+  return shuffledArray;
+}
 
 /**
  * Shifting function that shifts the elements by a random number to the left.
@@ -50,303 +49,291 @@ function FisherYatesShuffle(clue: number[]) {
  * @returns - A shifted clue array
  */
 function shiftGameClue(clue: number[]) {
-    const length = clue.length;
-    let randShift = Math.floor(Math.random() * length);
-    return clue.slice(randShift).concat(clue.slice(0, randShift));
+  const length = clue.length;
+  let randShift = Math.floor(Math.random() * length);
+  return clue.slice(randShift).concat(clue.slice(0, randShift));
 }
 
-
 /**
- * 
+ *
  * @param guess - Guess that is done by code breaker.
  * @param solution - Secret that is chosen by code master.
  * @returns - A number array represents the clue in the form of our current game.
  */
 function currentGameClue(guess: number[], solution: number[]) {
-    let clue = Array.from({ length: 4 }, () => 0);
+  let clue = Array.from({ length: 4 }, () => 0);
 
-    for (let i = 0; i < 4; i++) {
-        for (let j = 0; j < 4; j++) {
-            const isEqual = Number(guess[i] === solution[j]);
-            if (i === j) {
-                clue[i] = clue[i] + 2 * isEqual; // 2 for a hit (correct digit and position)
-            } else {
-                clue[i] = clue[i] + isEqual; // 1 for a blow (correct digit, wrong position)
-            }
-        }
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
+      const isEqual = Number(guess[i] === solution[j]);
+      if (i === j) {
+        clue[i] = clue[i] + 2 * isEqual; // 2 for a hit (correct digit and position)
+      } else {
+        clue[i] = clue[i] + isEqual; // 1 for a blow (correct digit, wrong position)
+      }
     }
-    return clue;
+  }
+  return clue;
 }
 
 /**
- * 
+ *
  * @param guess - Guess that is done by code breaker.
  * @param solution - Secret that is chosen by code master.
  * @returns - A number that represents the sum of the clues for every digit in the guess.
  */
 function summedGameClue(guess: number[], solution: number[]) {
-    let clue = Array.from({ length: 4 }, () => 0);
+  let clue = Array.from({ length: 4 }, () => 0);
 
-    for (let i = 0; i < 4; i++) {
-        for (let j = 0; j < 4; j++) {
-            const isEqual = Number(guess[i] === solution[j]);
-            if (i === j) {
-                clue[i] = clue[i] + 2 * isEqual; // 2 for a hit (correct digit and position)
-            } else {
-                clue[i] = clue[i] + isEqual; // 1 for a blow (correct digit, wrong position)
-            }
-        }
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
+      const isEqual = Number(guess[i] === solution[j]);
+      if (i === j) {
+        clue[i] = clue[i] + 2 * isEqual; // 2 for a hit (correct digit and position)
+      } else {
+        clue[i] = clue[i] + isEqual; // 1 for a blow (correct digit, wrong position)
+      }
     }
-    return clue.reduce((acc, curr) => acc + curr, 0);
+  }
+  return clue.reduce((acc, curr) => acc + curr, 0);
 }
 
 /**
- * 
+ *
  * @param guess - Guess that is done by code breaker.
  * @param solution - Secret that is chosen by code master.
  * @returns - A number array represents the clue that digits are shuffled.
  */
 function shuffledGameClue(guess: number[], solution: number[]) {
-    let clue = Array.from({ length: 4 }, () => 0);
+  let clue = Array.from({ length: 4 }, () => 0);
 
-    for (let i = 0; i < 4; i++) {
-        for (let j = 0; j < 4; j++) {
-            const isEqual = Number(guess[i] === solution[j]);
-            if (i === j) {
-                clue[i] = clue[i] + 2 * isEqual; // 2 for a hit (correct digit and position)
-            } else {
-                clue[i] = clue[i] + isEqual; // 1 for a blow (correct digit, wrong position)
-            }
-        }
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
+      const isEqual = Number(guess[i] === solution[j]);
+      if (i === j) {
+        clue[i] = clue[i] + 2 * isEqual; // 2 for a hit (correct digit and position)
+      } else {
+        clue[i] = clue[i] + isEqual; // 1 for a blow (correct digit, wrong position)
+      }
     }
+  }
 
-    return FisherYatesShuffle(clue);
-};
+  return FisherYatesShuffle(clue);
+}
 
 /**
- * 
+ *
  * @param guess - Guess that is done by code breaker.
  * @param solution - Secret that is chosen by code master.
  * @returns - A number array represents the clue that digits are shuffled.
  */
 function shiftedGameClue(guess: number[], solution: number[]) {
-    let clue = Array.from({ length: 4 }, () => 0);
+  let clue = Array.from({ length: 4 }, () => 0);
 
-    for (let i = 0; i < 4; i++) {
-        for (let j = 0; j < 4; j++) {
-            const isEqual = Number(guess[i] === solution[j]);
-            if (i === j) {
-                clue[i] = clue[i] + 2 * isEqual; // 2 for a hit (correct digit and position)
-            } else {
-                clue[i] = clue[i] + isEqual; // 1 for a blow (correct digit, wrong position)
-            }
-        }
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
+      const isEqual = Number(guess[i] === solution[j]);
+      if (i === j) {
+        clue[i] = clue[i] + 2 * isEqual; // 2 for a hit (correct digit and position)
+      } else {
+        clue[i] = clue[i] + isEqual; // 1 for a blow (correct digit, wrong position)
+      }
     }
+  }
 
-    return shiftGameClue(clue);
-};
-
+  return shiftGameClue(clue);
+}
 
 /**
- * 
+ *
  * @param guess - Guess that is done by code breaker.
  * @param solution - Secret that is chosen by code master.
  * @returns - An object that displays the number of hits and blows.
  */
 function classicalGameClue(guess: number[], solution: number[]) {
-    let clue = {
-        hit: 0,
-        blow: 0,
-    };
+  let clue = {
+    hit: 0,
+    blow: 0,
+  };
 
-    const solutionUsed = Array(4).fill(false);
-    const guessUsed = Array(4).fill(false);
+  const solutionUsed = Array(4).fill(false);
+  const guessUsed = Array(4).fill(false);
 
-    for (let i = 0; i < 4; i++) {
-        if (guess[i] === solution[i]) {
-            clue.hit++;
-            guessUsed[i] = true;
-            solutionUsed[i] = true;
-        }
+  for (let i = 0; i < 4; i++) {
+    if (guess[i] === solution[i]) {
+      clue.hit++;
+      guessUsed[i] = true;
+      solutionUsed[i] = true;
     }
-    for (let i = 0; i < 4; i++) {
-        if (guessUsed[i]) continue;
-        for (let j = 0; j < 4; j++) {
-            if (solutionUsed[j]) continue;
-            if (guess[i] === solution[j]) {
-                clue.blow++;
-                solutionUsed[j] = true;
-                break;
-            }
-        }
+  }
+  for (let i = 0; i < 4; i++) {
+    if (guessUsed[i]) continue;
+    for (let j = 0; j < 4; j++) {
+      if (solutionUsed[j]) continue;
+      if (guess[i] === solution[j]) {
+        clue.blow++;
+        solutionUsed[j] = true;
+        break;
+      }
     }
-    return clue;
+  }
+  return clue;
 }
-
 
 /**
  * Interface for readline module.
  */
 const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
+  input: process.stdin,
+  output: process.stdout,
 });
 
 /**
  * A function to simulate the game with summed clues in the console.
  */
 const summedGame = () => {
-    rl.question('Enter a guess (4 digits): ', (answer) => {
+  rl.question('Enter a guess (4 digits): ', (answer) => {
+    if (!/^\d{4}$/.test(answer)) {
+      console.log('You should enter exactly 4 digits!');
+      currentGame();
+      return;
+    }
+    const guess = answer.split('').map(Number);
 
-        if (!/^\d{4}$/.test(answer)) {
-            console.log('You should enter exactly 4 digits!');
-            currentGame();
-            return;
-        }
-        const guess = answer.split('').map(Number);
+    console.log(`You entered: '${answer}'`);
 
-        console.log(`You entered: '${answer}'`);
+    const clue = summedGameClue(guess, secret);
 
-        const clue = summedGameClue(guess, secret);
+    console.log(`Clue is: ${clue}`);
 
-        console.log(`Clue is: ${clue}`);
-
-        if (clue === 8) {
-            console.log('Congratulations! You guessed the secret!');
-            rl.close();
-        } else {
-            // Continue asking for the next guess
-            summedGame();
-        }
-    });
+    if (clue === 8) {
+      console.log('Congratulations! You guessed the secret!');
+      rl.close();
+    } else {
+      // Continue asking for the next guess
+      summedGame();
+    }
+  });
 };
-
 
 /**
  * A function to simulate the game with classical mastermind game clues in the console.
  */
 const classicalGame = () => {
-    rl.question('Enter a guess (4 digits): ', (answer) => {
-        if (!/^\d{4}$/.test(answer)) {
-            console.log('You should enter exactly 4 digits!');
-            currentGame();
-            return;
-        }
-        const guess = answer.split('').map(Number);
+  rl.question('Enter a guess (4 digits): ', (answer) => {
+    if (!/^\d{4}$/.test(answer)) {
+      console.log('You should enter exactly 4 digits!');
+      currentGame();
+      return;
+    }
+    const guess = answer.split('').map(Number);
 
-        console.log(`You entered: '${answer}'`);
+    console.log(`You entered: '${answer}'`);
 
-        const clue = classicalGameClue(guess, secret);
+    const clue = classicalGameClue(guess, secret);
 
-        console.log(`Clue : Hit: ${clue.hit} Blow: ${clue.blow}`);
-        if (clue.hit === 4) {
-            console.log('Congratulations! You guessed the secret!');
-            rl.close();
-        } else {
-            // Continue asking for the next guess
-            classicalGame();
-        }
-    });
+    console.log(`Clue : Hit: ${clue.hit} Blow: ${clue.blow}`);
+    if (clue.hit === 4) {
+      console.log('Congratulations! You guessed the secret!');
+      rl.close();
+    } else {
+      // Continue asking for the next guess
+      classicalGame();
+    }
+  });
 };
-
 
 /**
  * A function to simulate the game with shuffled clues in the console.
  */
 const shuffledClueGame = () => {
-    rl.question('Enter a guess (4 digits): ', (answer) => {
+  rl.question('Enter a guess (4 digits): ', (answer) => {
+    if (!/^\d{4}$/.test(answer)) {
+      console.log('You should enter exactly 4 digits!');
+      currentGame();
+      return;
+    }
 
-        if (!/^\d{4}$/.test(answer)) {
-            console.log('You should enter exactly 4 digits!');
-            currentGame();
-            return;
-        }
+    const guess = answer.split('').map(Number);
 
-        const guess = answer.split('').map(Number);
+    console.log(`You entered: '${answer}'`);
 
-        console.log(`You entered: '${answer}'`);
+    const clue = shuffledGameClue(guess, secret);
 
-        const clue = shuffledGameClue(guess, secret);
+    console.log(`Clue is: ${clue.join(' ')}`);
 
-        console.log(`Clue is: ${clue.join(' ')}`);
-
-        // If all positions match, end the game
-        if (clue.join('') === '2222') {
-            console.log('Congratulations! You guessed the secret!');
-            rl.close();
-        } else {
-            // Continue asking for the next guess
-            shuffledClueGame();
-        }
-    });
+    // If all positions match, end the game
+    if (clue.join('') === '2222') {
+      console.log('Congratulations! You guessed the secret!');
+      rl.close();
+    } else {
+      // Continue asking for the next guess
+      shuffledClueGame();
+    }
+  });
 };
-
 
 /**
  * A function to simulate the game with shifted clues in the console.
  */
 const shiftedClueGame = () => {
-    rl.question('Enter a guess (4 digits): ', (answer) => {
+  rl.question('Enter a guess (4 digits): ', (answer) => {
+    if (!/^\d{4}$/.test(answer)) {
+      console.log('You should enter exactly 4 digits!');
+      currentGame();
+      return;
+    }
+    const guess = answer.split('').map(Number);
 
-        if (!/^\d{4}$/.test(answer)) {
-            console.log('You should enter exactly 4 digits!');
-            currentGame();
-            return;
-        }
-        const guess = answer.split('').map(Number);
+    console.log(`You entered: '${answer}'`);
 
-        console.log(`You entered: '${answer}'`);
+    const clue = shiftedGameClue(guess, secret);
 
-        const clue = shiftedGameClue(guess, secret);
-
-        console.log(`Clue is: ${clue.join(' ')}`);
-        // If all positions match, end the game
-        if (clue.join('') === '2222') {
-            console.log('Congratulations! You guessed the secret!');
-            rl.close();
-        } else {
-            // Continue asking for the next guess
-            shiftedClueGame();
-        }
-    });
+    console.log(`Clue is: ${clue.join(' ')}`);
+    // If all positions match, end the game
+    if (clue.join('') === '2222') {
+      console.log('Congratulations! You guessed the secret!');
+      rl.close();
+    } else {
+      // Continue asking for the next guess
+      shiftedClueGame();
+    }
+  });
 };
-
 
 /**
  * A function to simulate the game with current clue system in the console.
  */
 const currentGame = () => {
-    rl.question('Enter a guess (4 digits): ', (answer) => {
+  rl.question('Enter a guess (4 digits): ', (answer) => {
+    if (!/^\d{4}$/.test(answer)) {
+      console.log('You should enter exactly 4 digits!');
+      currentGame();
+      return;
+    }
 
-        if (!/^\d{4}$/.test(answer)) {
-            console.log('You should enter exactly 4 digits!');
-            currentGame();
-            return;
-        }
+    const guess = answer.split('').map(Number);
 
-        const guess = answer.split('').map(Number);
+    console.log(`You entered: '${answer}'`);
 
-        console.log(`You entered: '${answer}'`);
+    const clue = currentGameClue(guess, secret);
 
-        const clue = currentGameClue(guess, secret);
+    console.log(`Clue is: ${clue.join(' ')}`);
 
-        console.log(`Clue is: ${clue.join(' ')}`);
-
-        // If all positions match, end the game
-        if (clue.join('') === '2222') {
-            console.log('Congratulations! You guessed the secret!');
-            rl.close();
-        } else {
-            // Continue asking for the next guess
-            currentGame();
-        }
-    });
+    // If all positions match, end the game
+    if (clue.join('') === '2222') {
+      console.log('Congratulations! You guessed the secret!');
+      rl.close();
+    } else {
+      // Continue asking for the next guess
+      currentGame();
+    }
+  });
 };
 
 const secret: number[] = gameGuesses.totalAttempts[8];
 
 process.stdout.write('Start\n');
-
 
 // Comment out the games you don't want to play.
 currentGame();
@@ -354,7 +341,3 @@ classicalGame();
 summedGame();
 shuffledClueGame();
 shiftedClueGame();
-
-
-
-
