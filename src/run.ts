@@ -27,7 +27,6 @@ const gameGuesses = {
   ],
 };
 
-
 /**
  * Generates a random number between 1-9.
  * @returns A random number.
@@ -57,7 +56,6 @@ function randomGuess(): number[] {
 
   return numbers;
 }
-
 
 /**
  * Implementation of Yates-Fisher shuffle algorithm: https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle.
@@ -338,7 +336,6 @@ const shiftedClueGame = () => {
  */
 const currentGame = () => {
   rl.question('Enter a guess (4 digits): ', (answer) => {
-
     const guess = answer.split('').map(Number);
 
     if (new Set(guess).size !== 4 || guess.some((num) => num < 1 || num > 9)) {
@@ -367,14 +364,17 @@ const currentGame = () => {
 let secret: number[];
 
 function chooseGameSecret() {
-  console.log("\n1 - Choose from predefined actions");
-  console.log("2 - Generate a non-repetitive random sequence");
-  console.log("3 - Generate a repetitive random sequence \n ");
+  console.log('\n1 - Choose from predefined actions');
+  console.log('2 - Generate a non-repetitive random sequence');
+  console.log('3 - Generate a repetitive random sequence \n ');
 
   rl.question('Choose secret method: ', (num) => {
     switch (num) {
       case '1':
-        secret = gameGuesses.totalAttempts[Math.floor(Math.random() * gameGuesses.totalAttempts.length)];
+        secret =
+          gameGuesses.totalAttempts[
+            Math.floor(Math.random() * gameGuesses.totalAttempts.length)
+          ];
         break;
       case '2':
         secret = randomUniqueGuess();
@@ -385,15 +385,13 @@ function chooseGameSecret() {
       default:
         console.log('Invalid number! Please enter a number between 1-3. ');
         chooseGameSecret();
-    };
+    }
 
     chooseGameMode();
-  })
-
+  });
 }
 
 function chooseGameMode() {
-
   console.log('1. Current Game Mode');
   console.log('2. Classical Game Mode');
   console.log('3. Summed Clue Game Mode');
@@ -422,7 +420,6 @@ function chooseGameMode() {
         chooseGameMode();
     }
   });
-
 }
 
 chooseGameSecret();
