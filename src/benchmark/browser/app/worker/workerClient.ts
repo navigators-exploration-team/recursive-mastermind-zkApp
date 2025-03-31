@@ -6,10 +6,6 @@ import type {
 } from './worker.js';
 
 export default class WorkerClient {
-  setActiveInstanceToLocal() {
-    return this._call('setActiveInstanceToLocal', {});
-  }
-
   loadAndCompileContract() {
     return this._call('loadAndCompileContract', {});
   }
