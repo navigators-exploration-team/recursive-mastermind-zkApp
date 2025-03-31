@@ -27,6 +27,7 @@ const gameGuesses = {
   ],
 };
 
+
 /**
  * Implementation of Yates-Fisher shuffle algorithm: https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle.
  * Used for shuffled clues mode.
@@ -195,7 +196,7 @@ const summedGame = () => {
   rl.question('Enter a guess (4 digits): ', (answer) => {
     if (!/^\d{4}$/.test(answer)) {
       console.log('You should enter exactly 4 digits!');
-      currentGame();
+      summedGame();
       return;
     }
     const guess = answer.split('').map(Number);
@@ -223,7 +224,7 @@ const classicalGame = () => {
   rl.question('Enter a guess (4 digits): ', (answer) => {
     if (!/^\d{4}$/.test(answer)) {
       console.log('You should enter exactly 4 digits!');
-      currentGame();
+      classicalGame();
       return;
     }
     const guess = answer.split('').map(Number);
@@ -250,7 +251,7 @@ const shuffledClueGame = () => {
   rl.question('Enter a guess (4 digits): ', (answer) => {
     if (!/^\d{4}$/.test(answer)) {
       console.log('You should enter exactly 4 digits!');
-      currentGame();
+      shuffledClueGame();
       return;
     }
 
@@ -280,7 +281,7 @@ const shiftedClueGame = () => {
   rl.question('Enter a guess (4 digits): ', (answer) => {
     if (!/^\d{4}$/.test(answer)) {
       console.log('You should enter exactly 4 digits!');
-      currentGame();
+      shiftedClueGame();
       return;
     }
     const guess = answer.split('').map(Number);
@@ -306,13 +307,14 @@ const shiftedClueGame = () => {
  */
 const currentGame = () => {
   rl.question('Enter a guess (4 digits): ', (answer) => {
-    if (!/^\d{4}$/.test(answer)) {
+
+    const guess = answer.split('').map(Number);
+
+    if (new Set(guess).size !== 4 || guess.some((num) => num < 1 || num > 9)) {
       console.log('You should enter exactly 4 digits!');
       currentGame();
       return;
     }
-
-    const guess = answer.split('').map(Number);
 
     console.log(`You entered: '${answer}'`);
 
@@ -335,9 +337,37 @@ const secret: number[] = gameGuesses.totalAttempts[8];
 
 process.stdout.write('Start\n');
 
-// Comment out the games you don't want to play.
-currentGame();
-classicalGame();
-summedGame();
-shuffledClueGame();
-shiftedClueGame();
+function chooseGameMode() {
+  console.log('1. Current Game Mode');
+  console.log('2. Classical Game Mode');
+  console.log('3. Summed Clue Game Mode');
+  console.log('4. Shuffled Clue Game Mode');
+  console.log('5. Shifted Clue Gmae Mode \n');
+
+
+  rl.question('Choose game mode (1-5) ', (mode) => {
+
+    switch (mode) {
+      case '1':
+        currentGame();
+        break;
+      case '2':
+        classicalGame();
+        break;
+      case '3':
+        summedGame();
+        break;
+      case '4':
+        shuffledClueGame();
+        break;
+      case '5':
+        shiftedClueGame();
+        break;
+      default:
+        console.log('\n Invalid choice, select a number between 1-5. \n');
+        chooseGameMode();
+    }
+  });
+}
+
+chooseGameMode();
