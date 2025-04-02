@@ -377,13 +377,13 @@ class MastermindZkApp extends SmartContract {
       this.rewardFinalizeSlot.getAndRequireEquals()
     );
 
-    const au = AccountUpdate.createIf(shouldSendReward, winnerPubKey);
+    const recipient = AccountUpdate.createIf(shouldSendReward, winnerPubKey);
     const amountToSend = Provable.if(
       shouldSendReward,
       rewardAmount,
       UInt64.zero
     );
-    this.send({ to: au, amount: amountToSend });
+    this.send({ to: recipient, amount: amountToSend });
 
     this.rewardFinalizeSlot.set(
       compressRewardAndFinalizeSlot(
