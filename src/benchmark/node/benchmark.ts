@@ -9,6 +9,7 @@ import {
   PublicKey,
   Lightnet,
   fetchAccount,
+  UInt8,
 } from 'o1js';
 
 import { StepProgram, StepProgramProof } from '../../stepProgram.js';
@@ -72,7 +73,7 @@ async function deployAndInitializeGame(
   codeMasterSalt: Field,
   unseparatedSecretCombination: Field,
   refereeKey: PrivateKey,
-  maxAttempt: Field
+  maxAttempt: UInt8
 ) {
   const deployerAccount = codeMasterKey.toPublicKey();
   const refereeAccount = refereeKey.toPublicKey();
@@ -284,21 +285,17 @@ async function main() {
     Field.from(1234),
   ];
 
-  // Step Length 1
-  await solveBenchmark(1234, steps.slice(14));
-  await solveBenchmark(4321, steps.slice(14));
+  // Step Length 3
+  await solveBenchmark(1234, steps.slice(12));
+  await solveBenchmark(4321, steps.slice(12));
+
+  // Step Length 4
+  await solveBenchmark(1234, steps.slice(11));
+  await solveBenchmark(4321, steps.slice(11));
 
   // Step Length 5
   await solveBenchmark(1234, steps.slice(10));
   await solveBenchmark(4321, steps.slice(10));
-
-  // Step Length 10
-  await solveBenchmark(1234, steps.slice(5));
-  await solveBenchmark(4321, steps.slice(5));
-
-  // Step Length 15
-  await solveBenchmark(1234, steps);
-  await solveBenchmark(4321, steps);
 
   console.log('Overall Benchmark Results for Solved Games');
   overallScores(benchmarkResults.filter((result) => result.isSolved));
@@ -434,7 +431,7 @@ async function solveBenchmark(secret: number, steps: Field[]) {
     codeMasterSalt,
     unseparatedSecretCombination,
     refereeKey,
-    Field.from(15)
+    UInt8.from(5)
   );
   let end = performance.now();
 
@@ -471,7 +468,7 @@ async function solveBenchmark(secret: number, steps: Field[]) {
           authPubKey: codeBreakerPubKey,
           authSignature: Signature.create(codeBreakerKey, [
             step,
-            lastProof.publicOutput.turnCount,
+            lastProof.publicOutput.turnCount.value,
           ]),
         },
         lastProof,
@@ -489,7 +486,7 @@ async function solveBenchmark(secret: number, steps: Field[]) {
           authSignature: Signature.create(codeMasterKey, [
             unseparatedSecretCombination,
             codeMasterSalt,
-            lastProof.publicOutput.turnCount,
+            lastProof.publicOutput.turnCount.value,
           ]),
         },
         lastProof,
@@ -511,7 +508,7 @@ async function solveBenchmark(secret: number, steps: Field[]) {
 
   await waitTransactionAndFetchAccount(
     submitGameProofTx,
-    [codeBreakerKey],
+    [refereeKey],
     [zkappAddress]
   );
   end = performance.now();
