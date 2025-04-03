@@ -169,13 +169,13 @@ class MastermindZkApp extends SmartContract {
     super.init();
 
     maxAttempts.assertGreaterThanOrEqual(
-      Field.from(5),
-      'The minimum number of attempts allowed is 5!'
+      Field.from(3),
+      'The minimum number of attempts allowed is 3!'
     );
 
     maxAttempts.assertLessThanOrEqual(
-      Field.from(15),
-      'The maximum number of attempts allowed is 15!'
+      Field.from(5),
+      'The maximum number of attempts allowed is 5!'
     );
 
     rewardAmount.assertGreaterThan(

@@ -302,7 +302,7 @@ describe('Mastermind ZkApp Tests', () => {
   /**
    * Prepare a new game.
    */
-  async function prepareNewGame(maxAttempts: number = 7) {
+  async function prepareNewGame(maxAttempts: number = 4) {
     zkappPrivateKey = PrivateKey.random();
     zkappAddress = zkappPrivateKey.toPublicKey();
     zkapp = new MastermindZkApp(zkappAddress);
@@ -798,27 +798,27 @@ describe('Mastermind ZkApp Tests', () => {
       );
     });
 
-    it('Reject initGame if maxAttempts > 15', async () => {
-      const expectedMsg = 'The maximum number of attempts allowed is 15!';
+    it('Reject initGame if maxAttempts > 5', async () => {
+      const expectedMsg = 'The maximum number of attempts allowed is 5!';
       await expectInitializeGameToFail(
         zkapp,
         codeMasterKey,
         secretCombination,
         codeMasterSalt,
-        20,
+        6,
         refereeKey,
         expectedMsg
       );
     });
 
-    it('Reject initGame if maxAttempts < 5', async () => {
-      const expectedMsg = 'The minimum number of attempts allowed is 5!';
+    it('Reject initGame if maxAttempts < 3', async () => {
+      const expectedMsg = 'The minimum number of attempts allowed is 3!';
       await expectInitializeGameToFail(
         zkapp,
         codeMasterKey,
         secretCombination,
         codeMasterSalt,
-        4,
+        2,
         refereeKey,
         expectedMsg
       );
@@ -1335,7 +1335,7 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Should generate a proof with randomly chosen actions for codeBreaker victory and settle.', async () => {
-      const rounds = 5;
+      const rounds = 3;
       const winnerFlag = 'codebreaker-victory';
 
       const expectedMsg = 'You are not the winner of this game!';
@@ -1375,7 +1375,7 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Should generate a proof with predefined actions for codeBreaker victory and settle.', async () => {
-      const rounds = 5;
+      const rounds = 3;
       const winnerFlag = 'codebreaker-victory';
 
       const expectedMsg = 'You are not the winner of this game!';
@@ -1428,7 +1428,7 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Should generate a proof with randomly chosen actions for unsolved game and fail to settle.', async () => {
-      const rounds = 5;
+      const rounds = 3;
       const expectedMsg = 'You are not the winner of this game!';
       const winnerFlag = 'unsolved';
 
@@ -1469,7 +1469,7 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Should generate a proof with predefined actions for unsolved game and fail to settle.', async () => {
-      const rounds = 5;
+      const rounds = 3;
       const expectedMsg = 'You are not the winner of this game!';
       const winnerFlag = 'unsolved';
 
