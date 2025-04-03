@@ -12,19 +12,18 @@ import {
   Permissions,
   Struct,
   Provable,
+  Bool,
+  UInt8,
 } from 'o1js';
 
 import {
   checkIfSolved,
-  compressRewardAndFinalizeSlot,
-  compressTurnCountMaxAttemptSolved,
   deserializeClue,
   deserializeCombinationHistory,
+  GameState,
   getClueFromGuess,
   getElementAtIndex,
   separateCombinationDigits,
-  separateRewardAndFinalizeSlot,
-  separateTurnCountAndMaxAttemptSolved,
   serializeClue,
   serializeCombinationHistory,
   updateElementAtIndex,
@@ -43,7 +42,7 @@ const PER_ATTEMPT_GAME_DURATION = 2; // 2 slots (6 minute) per attempt
 
 class NewGameEvent extends Struct({
   rewardAmount: UInt64,
-  maxAttempts: Field,
+  maxAttempts: UInt8,
 }) {}
 
 class GameAcceptedEvent extends Struct({
@@ -52,13 +51,7 @@ class GameAcceptedEvent extends Struct({
 }) {}
 
 class MastermindZkApp extends SmartContract {
-  /**
-   * `turnCountMaxAttemptsIsSolved` is a compressed state variable that
-   * stores the current turn count, maximum number of attempts allowed, and whether the game has been solved.
-   * Uses `compressTurnCountMaxAttemptSolved` to compress the state variable.
-   * The state variable is decompressed using `separateTurnCountAndMaxAttemptSolved`.
-   */
-  @state(Field) turnCountMaxAttemptsIsSolved = State<Field>();
+  @state(Field) compressedState = State<Field>();
 
   /**
    * `codeMasterId` is the ID of the codeMaster `Hash(PubKey)` who created the game.
@@ -90,13 +83,6 @@ class MastermindZkApp extends SmartContract {
    */
   @state(Field) packedClueHistory = State<Field>();
 
-  /**
-   * `rewardFinalizeSlot` is a compressed state variable that stores the reward amount(`UInt64`) and the slot(`UInt32`) when the game is finalized.
-   * Uses `compressRewardAndFinalizeSlot` to compress the state variable.
-   * The state variable is decompressed using `separateRewardAndFinalizeSlot`.
-   */
-  @state(Field) rewardFinalizeSlot = State<Field>();
-
   readonly events = {
     newGame: NewGameEvent,
     gameAccepted: GameAcceptedEvent,
@@ -106,9 +92,9 @@ class MastermindZkApp extends SmartContract {
    * Asserts that the game is still ongoing. For internal use only.
    */
   async assertNotFinalized() {
-    const { finalizeSlot } = separateRewardAndFinalizeSlot(
-      this.rewardFinalizeSlot.getAndRequireEquals()
-    );
+    const finalizeSlot = GameState.unpack(
+      this.compressedState.getAndRequireEquals()
+    ).finalizeSlot;
 
     finalizeSlot
       .equals(UInt32.zero)
@@ -159,7 +145,7 @@ class MastermindZkApp extends SmartContract {
   @method async initGame(
     unseparatedSecretCombination: Field,
     salt: Field,
-    maxAttempts: Field,
+    maxAttempts: UInt8,
     refereePubKey: PublicKey,
     rewardAmount: UInt64
   ) {
@@ -169,26 +155,18 @@ class MastermindZkApp extends SmartContract {
     super.init();
 
     maxAttempts.assertGreaterThanOrEqual(
-      Field.from(3),
+      UInt8.from(3),
       'The minimum number of attempts allowed is 3!'
     );
 
     maxAttempts.assertLessThanOrEqual(
-      Field.from(5),
+      UInt8.from(5),
       'The maximum number of attempts allowed is 5!'
     );
 
     rewardAmount.assertGreaterThan(
       UInt64.zero,
       'The reward amount must be greater than zero!'
-    );
-
-    this.turnCountMaxAttemptsIsSolved.set(
-      compressTurnCountMaxAttemptSolved([
-        Field.from(1), // Turn count starts from 1
-        maxAttempts,
-        Field.from(0),
-      ])
     );
 
     const refereeId = Poseidon.hash(refereePubKey.toFields());
@@ -211,9 +189,15 @@ class MastermindZkApp extends SmartContract {
     const codeMasterUpdate = AccountUpdate.createSigned(sender);
     codeMasterUpdate.send({ to: this.address, amount: rewardAmount });
 
-    this.rewardFinalizeSlot.set(
-      compressRewardAndFinalizeSlot(rewardAmount, UInt32.zero)
-    );
+    const gameState = new GameState({
+      rewardAmount,
+      finalizeSlot: UInt32.zero,
+      maxAttempts,
+      turnCount: UInt8.from(1),
+      isSolved: Bool(false),
+    });
+
+    this.compressedState.set(gameState.pack());
 
     this.emitEvent(
       'newGame',
@@ -239,14 +223,11 @@ class MastermindZkApp extends SmartContract {
         'The game has already been accepted by the codeBreaker!'
       );
 
-    const [turnCount, maxAttempts] = separateTurnCountAndMaxAttemptSolved(
-      this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
+    const { rewardAmount, maxAttempts, turnCount } = GameState.unpack(
+      this.compressedState.getAndRequireEquals()
     );
-    turnCount.assertEquals(1, 'The game has not been created yet!');
 
-    const { rewardAmount } = separateRewardAndFinalizeSlot(
-      this.rewardFinalizeSlot.getAndRequireEquals()
-    );
+    turnCount.assertEquals(1, 'The game has not been created yet!');
 
     rewardAmount.assertGreaterThan(
       UInt64.zero,
@@ -268,15 +249,19 @@ class MastermindZkApp extends SmartContract {
 
     // Set the finalize slot to be maxAttempts * PER_ATTEMPT_GAME_DURATION slots after the current slot
     const finalizeSlot = currentSlot.add(
-      UInt32.Unsafe.fromField(maxAttempts) // We already constrained maxAttempts to be between 5 and 15
+      UInt32.Unsafe.fromField(maxAttempts.value) // We already constrained maxAttempts to be between 5 and 15
         .mul(PER_ATTEMPT_GAME_DURATION)
     );
-    this.rewardFinalizeSlot.set(
-      compressRewardAndFinalizeSlot(
-        rewardAmount.add(rewardAmount),
-        finalizeSlot
-      )
-    );
+
+    const gameState = new GameState({
+      rewardAmount: rewardAmount.add(rewardAmount),
+      finalizeSlot,
+      maxAttempts,
+      turnCount,
+      isSolved: Bool(false),
+    });
+
+    this.compressedState.set(gameState.pack());
 
     this.emitEvent(
       'gameAccepted',
@@ -308,12 +293,11 @@ class MastermindZkApp extends SmartContract {
 
     const finalizeSlot = await this.assertNotFinalized();
 
-    let [turnCount, maxAttempts, isSolved] =
-      separateTurnCountAndMaxAttemptSolved(
-        this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
-      );
+    let { rewardAmount, turnCount, maxAttempts, isSolved } = GameState.unpack(
+      this.compressedState.getAndRequireEquals()
+    );
 
-    isSolved.assertEquals(0, 'The game secret has already been solved!');
+    isSolved.assertFalse('The game secret has already been solved!');
 
     proof.verify();
 
@@ -342,21 +326,10 @@ class MastermindZkApp extends SmartContract {
     );
 
     const deserializedClue = deserializeClue(proof.publicOutput.serializedClue);
-    isSolved = checkIfSolved(deserializedClue)
-      .and(maxAttemptsExceeded.not())
-      .toField();
+    isSolved = checkIfSolved(deserializedClue).and(maxAttemptsExceeded.not());
 
     this.packedGuessHistory.set(proof.publicOutput.packedGuessHistory);
     this.packedClueHistory.set(proof.publicOutput.packedClueHistory);
-
-    const updatedTurnCountMaxAttemptsIsSolved =
-      compressTurnCountMaxAttemptSolved([
-        proof.publicOutput.turnCount,
-        maxAttempts,
-        isSolved,
-      ]);
-
-    this.turnCountMaxAttemptsIsSolved.set(updatedTurnCountMaxAttemptsIsSolved);
 
     const winnerId = Poseidon.hash(winnerPubKey.toFields());
 
@@ -364,18 +337,14 @@ class MastermindZkApp extends SmartContract {
     const isCodeBreaker = codeBreakerId.equals(winnerId);
 
     const codeMasterWinByMaxAttempts = isSolved
-      .equals(0)
+      .not()
       .and(proof.publicOutput.turnCount.greaterThanOrEqual(maxAttempts.mul(2)));
 
-    const codeBreakerWin = isSolved.equals(1);
+    const codeBreakerWin = isSolved;
 
     const shouldSendReward = isCodeMaster
       .and(codeMasterWinByMaxAttempts)
       .or(isCodeBreaker.and(codeBreakerWin));
-
-    const { rewardAmount } = separateRewardAndFinalizeSlot(
-      this.rewardFinalizeSlot.getAndRequireEquals()
-    );
 
     const recipient = AccountUpdate.createIf(shouldSendReward, winnerPubKey);
     const amountToSend = Provable.if(
@@ -385,12 +354,15 @@ class MastermindZkApp extends SmartContract {
     );
     this.send({ to: recipient, amount: amountToSend });
 
-    this.rewardFinalizeSlot.set(
-      compressRewardAndFinalizeSlot(
-        Provable.if(shouldSendReward, UInt64.zero, rewardAmount),
-        Provable.if(shouldSendReward, UInt32.zero, finalizeSlot)
-      )
-    );
+    const gameState = new GameState({
+      rewardAmount: Provable.if(shouldSendReward, UInt64.zero, rewardAmount),
+      finalizeSlot: Provable.if(shouldSendReward, UInt32.zero, finalizeSlot),
+      maxAttempts,
+      turnCount: proof.publicOutput.turnCount,
+      isSolved,
+    });
+
+    this.compressedState.set(gameState.pack());
   }
 
   /**
@@ -398,14 +370,8 @@ class MastermindZkApp extends SmartContract {
    * @throws If the game has not been finalized yet, or if the caller is not the winner.
    */
   @method async claimReward() {
-    let [turnCount, maxAttempts, isSolved] =
-      separateTurnCountAndMaxAttemptSolved(
-        this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
-      );
-
-    const { finalizeSlot } = separateRewardAndFinalizeSlot(
-      this.rewardFinalizeSlot.getAndRequireEquals()
-    );
+    let { rewardAmount, finalizeSlot, turnCount, maxAttempts, isSolved } =
+      GameState.unpack(this.compressedState.getAndRequireEquals());
 
     const currentSlot =
       this.network.globalSlotSinceGenesis.getAndRequireEquals();
@@ -425,13 +391,13 @@ class MastermindZkApp extends SmartContract {
     // Code Master wins if the game is finalized and the codeBreaker has not solved the secret combination yet
     // Also if game is not accepted by the codeBreaker yet, the finalize slot is remains 0
     // So code master can use this method to reimburse the reward before the code breaker accepts the game
-    const codeMasterWinByFinalize = isSolved.equals(0).and(isFinalized);
+    const codeMasterWinByFinalize = isSolved.not().and(isFinalized);
     // Code Master wins if the codeBreaker has reached the maximum number of attempts without solving the secret combination
     const codeMasterWinByMaxAttempts = isSolved
-      .equals(0)
+      .not()
       .and(turnCount.greaterThanOrEqual(maxAttempts.mul(2)));
 
-    const codeBreakerWin = isSolved.equals(1);
+    const codeBreakerWin = isSolved;
 
     isCodeMaster
       .or(isCodeBreaker)
@@ -443,14 +409,17 @@ class MastermindZkApp extends SmartContract {
 
     isWinner.assertTrue('You are not the winner of this game!');
 
-    const { rewardAmount } = separateRewardAndFinalizeSlot(
-      this.rewardFinalizeSlot.getAndRequireEquals()
-    );
     this.send({ to: claimer, amount: rewardAmount });
 
-    this.rewardFinalizeSlot.set(
-      compressRewardAndFinalizeSlot(UInt64.zero, UInt32.zero)
-    );
+    const gameState = new GameState({
+      rewardAmount: UInt64.zero,
+      finalizeSlot: UInt32.zero,
+      maxAttempts,
+      turnCount,
+      isSolved,
+    });
+
+    this.compressedState.set(gameState.pack());
   }
 
   /**
@@ -488,9 +457,8 @@ class MastermindZkApp extends SmartContract {
       .or(isCodeMaster)
       .assertTrue('The provided public key is not a player in this game!');
 
-    const { rewardAmount, finalizeSlot } = separateRewardAndFinalizeSlot(
-      this.rewardFinalizeSlot.getAndRequireEquals()
-    );
+    let { rewardAmount, finalizeSlot, turnCount, maxAttempts, isSolved } =
+      GameState.unpack(this.compressedState.getAndRequireEquals());
 
     rewardAmount.assertGreaterThan(
       UInt64.zero,
@@ -499,9 +467,14 @@ class MastermindZkApp extends SmartContract {
 
     this.send({ to: playerPubKey, amount: rewardAmount });
 
-    this.rewardFinalizeSlot.set(
-      compressRewardAndFinalizeSlot(UInt64.zero, finalizeSlot)
-    );
+    const gameState = new GameState({
+      rewardAmount: UInt64.zero,
+      finalizeSlot,
+      maxAttempts,
+      turnCount,
+      isSolved,
+    });
+    this.compressedState.set(gameState.pack());
   }
 
   /**
@@ -515,19 +488,17 @@ class MastermindZkApp extends SmartContract {
 
     await this.assertNotFinalized();
 
-    const [turnCount, maxAttempts, isSolved] =
-      separateTurnCountAndMaxAttemptSolved(
-        this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
-      );
+    let { rewardAmount, finalizeSlot, turnCount, maxAttempts, isSolved } =
+      GameState.unpack(this.compressedState.getAndRequireEquals());
 
     turnCount.assertGreaterThan(
-      Field.from(0),
+      UInt8.from(0),
       'The game has not been accepted by the codeBreaker yet!'
     );
 
-    isSolved.assertEquals(0, 'The game secret has already been solved!');
+    isSolved.assertFalse('The game secret has already been solved!');
 
-    const isCodebreakerTurn = turnCount.isEven().not();
+    const isCodebreakerTurn = turnCount.value.isEven().not();
     isCodebreakerTurn.assertTrue(
       'Please wait for the codeMaster to give you a clue!'
     );
@@ -557,7 +528,7 @@ class MastermindZkApp extends SmartContract {
     const updatedGuessHistory = updateElementAtIndex(
       unseparatedGuess,
       guessHistory,
-      turnCount.sub(1).div(2)
+      turnCount.sub(1).div(2).value
     );
 
     const serializedUpdatedGuessHistory =
@@ -567,14 +538,14 @@ class MastermindZkApp extends SmartContract {
     this.packedGuessHistory.set(serializedUpdatedGuessHistory);
 
     // Increment turnCount and wait for the codeMaster to give a clue
-    const updatedTurnCountMaxAttemptsIsSolved =
-      compressTurnCountMaxAttemptSolved([
-        turnCount.add(1),
-        maxAttempts,
-        isSolved,
-      ]);
-
-    this.turnCountMaxAttemptsIsSolved.set(updatedTurnCountMaxAttemptsIsSolved);
+    const gameState = new GameState({
+      rewardAmount,
+      finalizeSlot,
+      maxAttempts,
+      turnCount: turnCount.add(1),
+      isSolved,
+    });
+    this.compressedState.set(gameState.pack());
   }
 
   /**
@@ -589,10 +560,8 @@ class MastermindZkApp extends SmartContract {
 
     await this.assertNotFinalized();
 
-    const [turnCount, maxAttempts, isSolved] =
-      separateTurnCountAndMaxAttemptSolved(
-        this.turnCountMaxAttemptsIsSolved.getAndRequireEquals()
-      );
+    let { rewardAmount, finalizeSlot, turnCount, maxAttempts, isSolved } =
+      GameState.unpack(this.compressedState.getAndRequireEquals());
 
     const computedCodemasterId = Poseidon.hash(
       this.sender.getAndRequireSignature().toFields()
@@ -610,17 +579,16 @@ class MastermindZkApp extends SmartContract {
       'The codeBreaker has finished the number of attempts without solving the secret combination!'
     );
 
-    isSolved.assertEquals(
-      0,
+    isSolved.assertFalse(
       'The codeBreaker has already solved the secret combination!'
     );
 
-    turnCount.assertNotEquals(
-      Field.from(0),
+    turnCount.assertGreaterThan(
+      UInt8.from(0),
       'Game has not been accepted by the codeBreaker yet!'
     );
 
-    const isCodemasterTurn = turnCount.isEven();
+    const isCodemasterTurn = turnCount.value.isEven();
     isCodemasterTurn.assertTrue(
       'Please wait for the codeBreaker to make a guess!'
     );
@@ -640,7 +608,7 @@ class MastermindZkApp extends SmartContract {
     );
 
     const guessIndex = turnCount.div(2).sub(1);
-    const latestGuess = getElementAtIndex(guessHistory, guessIndex);
+    const latestGuess = getElementAtIndex(guessHistory, guessIndex.value);
 
     const guessDigits = separateCombinationDigits(latestGuess);
 
@@ -652,7 +620,7 @@ class MastermindZkApp extends SmartContract {
     const updatedClueHistory = updateElementAtIndex(
       serializedClue,
       clueHistory,
-      guessIndex
+      guessIndex.value
     );
 
     const serializedUpdatedClueHistory =
@@ -661,15 +629,15 @@ class MastermindZkApp extends SmartContract {
     this.packedClueHistory.set(serializedUpdatedClueHistory);
 
     // Check if the guess is correct & update the on-chain state
-    let isSolvedThisTurn = checkIfSolved(clue).toField();
-    // Increment the on-chain turnCount and update the isSolved state
-    const updatedTurnCountMaxAttemptsIsSolved =
-      compressTurnCountMaxAttemptSolved([
-        turnCount.add(1),
-        maxAttempts,
-        isSolvedThisTurn,
-      ]);
+    isSolved = isSolved.or(checkIfSolved(clue));
+    const gameState = new GameState({
+      rewardAmount,
+      finalizeSlot,
+      maxAttempts,
+      turnCount: turnCount.add(1),
+      isSolved,
+    });
 
-    this.turnCountMaxAttemptsIsSolved.set(updatedTurnCountMaxAttemptsIsSolved);
+    this.compressedState.set(gameState.pack());
   }
 }

@@ -5,6 +5,7 @@ import {
   SelfProof,
   Signature,
   Struct,
+  UInt8,
   ZkProgram,
 } from 'o1js';
 
@@ -47,7 +48,7 @@ class PublicOutputs extends Struct({
   solutionHash: Field,
   lastGuess: Field,
   serializedClue: Field,
-  turnCount: Field,
+  turnCount: UInt8,
   packedGuessHistory: Field,
   packedClueHistory: Field,
 }) {}
@@ -94,7 +95,7 @@ const StepProgram = ZkProgram({
             solutionHash,
             lastGuess: Field.empty(),
             serializedClue: Field.empty(),
-            turnCount: Field.from(1),
+            turnCount: UInt8.from(1),
             packedGuessHistory: Field.from(0),
             packedClueHistory: Field.from(0),
           }),
@@ -124,7 +125,7 @@ const StepProgram = ZkProgram({
 
         //! Verify the signature of code breaker
         authInputs.authSignature
-          .verify(authInputs.authPubKey, [unseparatedGuess, turnCount])
+          .verify(authInputs.authPubKey, [unseparatedGuess, turnCount.value])
           .assertTrue('You are not the codeBreaker of this game!');
 
         const deserializedClue = deserializeClue(
@@ -136,14 +137,14 @@ const StepProgram = ZkProgram({
         isSolved.assertFalse('You have already solved the secret combination!');
 
         //! Only allow codeBreaker to call this method following the correct turn sequence
-        const isCodebreakerTurn = turnCount.isEven().not();
+        const isCodebreakerTurn = turnCount.value.isEven().not();
         isCodebreakerTurn.assertTrue(
           'Please wait for the codeMaster to give you a clue!'
         );
 
         //? If first guess ==> set the codeBreaker ID
         //? Else           ==> use the previous codeBreaker ID
-        const isFirstGuess = turnCount.equals(1);
+        const isFirstGuess = turnCount.value.equals(1);
         const computedCodebreakerId = Poseidon.hash(
           authInputs.authPubKey.toFields()
         );
@@ -167,7 +168,7 @@ const StepProgram = ZkProgram({
         const updatedGuessHistory = updateElementAtIndex(
           unseparatedGuess,
           guessHistory,
-          turnCount.sub(1).div(2)
+          turnCount.sub(1).div(2).value
         );
 
         const serializedUpdatedGuessHistory =
@@ -212,7 +213,7 @@ const StepProgram = ZkProgram({
           .verify(authInputs.authPubKey, [
             unseparatedSecretCombination,
             salt,
-            turnCount,
+            turnCount.value,
           ])
           .assertTrue(
             'Only the codeMaster of this game is allowed to give clue!'
@@ -230,8 +231,8 @@ const StepProgram = ZkProgram({
         );
 
         //! Assert that the turnCount is pair & not zero for the codeMaster to call this method
-        const isNotFirstTurn = turnCount.equals(0).not();
-        const isCodemasterTurn = turnCount.isEven().and(isNotFirstTurn);
+        const isNotFirstTurn = turnCount.value.equals(0).not();
+        const isCodemasterTurn = turnCount.value.isEven().and(isNotFirstTurn);
         isCodemasterTurn.assertTrue(
           'Please wait for the codeBreaker to make a guess!'
         );
@@ -258,7 +259,7 @@ const StepProgram = ZkProgram({
         );
 
         const guessIndex = turnCount.div(2).sub(1);
-        const latestGuess = getElementAtIndex(guessHistory, guessIndex);
+        const latestGuess = getElementAtIndex(guessHistory, guessIndex.value);
 
         latestGuess.assertEquals(
           previousGuess.publicOutput.lastGuess,
@@ -278,7 +279,7 @@ const StepProgram = ZkProgram({
         const updatedClueHistory = updateElementAtIndex(
           serializedClue,
           clueHistory,
-          guessIndex
+          guessIndex.value
         );
 
         const serializedUpdatedClueHistory =
