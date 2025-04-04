@@ -137,16 +137,30 @@ export default function Home() {
 
       const benchmarkResults: BenchmarkResults[] = [];
 
-      updateProgress('Running benchmark for step length 1...');
+      updateProgress('Running benchmark for step length 3...');
       let result = await workerClient.solveBenchmark({
         secretCombination: [1, 2, 3, 4],
-        steps: steps.slice(14),
+        steps: steps.slice(12),
       });
       benchmarkResults.push(result);
       prettifyBenchmark(result);
       result = await workerClient.solveBenchmark({
         secretCombination: [4, 3, 2, 1],
-        steps: steps.slice(14),
+        steps: steps.slice(12),
+      });
+      benchmarkResults.push(result);
+      prettifyBenchmark(result);
+
+      updateProgress('Running benchmark for step length 4...');
+      result = await workerClient.solveBenchmark({
+        secretCombination: [1, 2, 3, 4],
+        steps: steps.slice(11),
+      });
+      benchmarkResults.push(result);
+      prettifyBenchmark(result);
+      result = await workerClient.solveBenchmark({
+        secretCombination: [4, 3, 2, 1],
+        steps: steps.slice(11),
       });
       benchmarkResults.push(result);
       prettifyBenchmark(result);
@@ -161,34 +175,6 @@ export default function Home() {
       result = await workerClient.solveBenchmark({
         secretCombination: [4, 3, 2, 1],
         steps: steps.slice(10),
-      });
-      benchmarkResults.push(result);
-      prettifyBenchmark(result);
-
-      updateProgress('Running benchmark for step length 10...');
-      result = await workerClient.solveBenchmark({
-        secretCombination: [1, 2, 3, 4],
-        steps: steps.slice(5),
-      });
-      benchmarkResults.push(result);
-      prettifyBenchmark(result);
-      result = await workerClient.solveBenchmark({
-        secretCombination: [4, 3, 2, 1],
-        steps: steps.slice(5),
-      });
-      benchmarkResults.push(result);
-      prettifyBenchmark(result);
-
-      updateProgress('Running benchmark for step length 15...');
-      result = await workerClient.solveBenchmark({
-        secretCombination: [1, 2, 3, 4],
-        steps: steps,
-      });
-      benchmarkResults.push(result);
-      prettifyBenchmark(result);
-      result = await workerClient.solveBenchmark({
-        secretCombination: [4, 3, 2, 1],
-        steps: steps,
       });
       benchmarkResults.push(result);
       prettifyBenchmark(result);

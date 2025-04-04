@@ -9,6 +9,7 @@ import {
   Signature,
   fetchAccount,
   Lightnet,
+  UInt8,
 } from 'o1js';
 import { StepProgram } from '../../../../../build/src/stepProgram';
 import { MastermindZkApp } from '../../../../../build/src/Mastermind';
@@ -245,7 +246,7 @@ const functions = {
         await state.zkapp!.initGame(
           state.unseparatedSecretCombination!,
           state.codeMasterSalt!,
-          Field.from(10),
+          UInt8.from(5),
           state.refereeKey!.toPublicKey(),
           UInt64.from(10000)
         );
@@ -327,7 +328,7 @@ const functions = {
             authPubKey: state.codeBreakerPubKey!,
             authSignature: Signature.create(state.codeBreakerKey!, [
               Field.from(step),
-              proof.publicOutput.turnCount,
+              proof.publicOutput.turnCount.value,
             ]),
           },
           proof,
@@ -346,7 +347,7 @@ const functions = {
             authSignature: Signature.create(state.codeMasterKey!, [
               state.unseparatedSecretCombination!,
               state.codeMasterSalt!,
-              proof.publicOutput.turnCount,
+              proof.publicOutput.turnCount.value,
             ]),
           },
           proof,

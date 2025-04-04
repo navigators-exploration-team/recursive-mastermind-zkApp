@@ -1,4 +1,4 @@
-import { Field, Bool, Provable, UInt64, UInt32 } from 'o1js';
+import { Field, Bool, Provable, UInt64, UInt32, Struct, UInt8 } from 'o1js';
 
 export {
   separateCombinationDigits,
@@ -10,14 +10,11 @@ export {
   deserializeClueHistory,
   getClueFromGuess,
   checkIfSolved,
-  compressTurnCountMaxAttemptSolved,
-  separateTurnCountAndMaxAttemptSolved,
-  compressRewardAndFinalizeSlot,
-  separateRewardAndFinalizeSlot,
   serializeCombinationHistory,
   deserializeCombinationHistory,
   updateElementAtIndex,
   getElementAtIndex,
+  GameState,
 };
 
 /**
@@ -176,77 +173,6 @@ function checkIfSolved(clue: Field[]) {
 }
 
 /**
- * Combines the turn count, max attempt, and solved flag into a single Field value.
- *
- * @param digits - An array of three Field elements representing the turn count, max attempt, and solved flag.
- * @returns - The combined Field element representing the compressed turn count, max attempt, and solved flag.
- */
-function compressTurnCountMaxAttemptSolved(digits: Field[]) {
-  digits[0].assertLessThan(100, 'Turn count must be less than 100!');
-  digits[1].assertLessThan(100, 'Max attempt must be less than 100!');
-  digits[2].assertLessThan(2, 'Solved flag must be less than 2!');
-
-  return digits[0].mul(10000).add(digits[1].mul(100).add(digits[2]));
-}
-
-/**
- * Separates the turn count, max attempt, and solved flag from a single Field value.
- *
- * @param value - The Field value to be separated into `turnCount`, `maxAttempt`, and `isSolved` flag
- * @returns An array of three Field elements representing the separated turn count, max attempt, and solved flag.
- */
-function separateTurnCountAndMaxAttemptSolved(value: Field) {
-  const digits = Provable.witness(Provable.Array(Field, 3), () => {
-    const num = value.toBigInt();
-
-    return [num / 10000n, (num / 100n) % 100n, num % 100n];
-  });
-
-  compressTurnCountMaxAttemptSolved(digits).assertEquals(value);
-
-  return digits;
-}
-
-/**
- * Combines the reward amount and finalize slot into a single Field value.
- * @param rewardAmount - The amount of reward in `UInt64`.
- * @param finalizeSlot - The slot at which the game will finalize in `UInt32`.
- * @returns The combined Field element representing the compressed reward amount and finalize slot.
- */
-function compressRewardAndFinalizeSlot(
-  rewardAmount: UInt64,
-  finalizeSlot: UInt32
-) {
-  return rewardAmount.value.mul(2 ** 32).add(finalizeSlot.value);
-}
-
-/**
- * Separates the reward amount and finalize slot from a single Field value.
- *
- * @param value - The Field value to be separated into reward amount and finalize slot.
- * @returns - An object containing the separated reward amount and finalize slot.
- */
-function separateRewardAndFinalizeSlot(value: Field) {
-  const digits = Provable.witness(Provable.Array(UInt32, 3), () => {
-    const num = value.toBigInt();
-    return [
-      UInt32.from(num / 18446744073709551616n),
-      UInt32.from((num / 4294967296n) % 4294967296n),
-      UInt32.from(num % 4294967296n),
-    ];
-  });
-
-  let rewardAmount = UInt64.from(digits[0])
-    .mul(2 ** 32)
-    .add(UInt64.from(digits[1]));
-  let finalizeSlot = digits[2];
-
-  compressRewardAndFinalizeSlot(rewardAmount, finalizeSlot).assertEquals(value);
-
-  return { rewardAmount, finalizeSlot };
-}
-
-/**
  * Serializes an array of clues into a single `Field` by converting each clue into an 8-bit representation.
  *
  * @param clues - An array of `Field` elements representing the clues.
@@ -392,4 +318,53 @@ function deserialize(
 
   const unpacked = unpackedBits.map((bits) => Field.fromBits(bits));
   return unpacked;
+}
+
+class GameState extends Struct({
+  rewardAmount: UInt64,
+  finalizeSlot: UInt32,
+  maxAttempts: UInt8,
+  turnCount: UInt8,
+  isSolved: Bool,
+}) {
+  static default = new this({
+    rewardAmount: UInt64.from(1e9),
+    finalizeSlot: UInt32.from(0),
+    maxAttempts: UInt8.from(4),
+    turnCount: UInt8.from(0),
+    isSolved: Bool(false),
+  });
+
+  pack() {
+    const { rewardAmount, finalizeSlot, maxAttempts, turnCount, isSolved } =
+      this;
+
+    const serializedState = [
+      rewardAmount.toBits(),
+      finalizeSlot.toBits(),
+      maxAttempts.toBits(),
+      turnCount.toBits(),
+      isSolved.toField().toBits(1),
+    ].flat();
+
+    return Field.fromBits(serializedState);
+  }
+
+  static unpack(serializedState: Field) {
+    const bits = serializedState.toBits();
+
+    const rewardAmount = UInt64.fromBits(bits.slice(0, 64));
+    const finalizeSlot = UInt32.fromBits(bits.slice(64, 96));
+    const maxAttempts = UInt8.fromBits(bits.slice(96, 104));
+    const turnCount = UInt8.fromBits(bits.slice(104, 112));
+    const isSolved = bits[112];
+
+    return new this({
+      rewardAmount,
+      finalizeSlot,
+      maxAttempts,
+      turnCount,
+      isSolved,
+    });
+  }
 }
