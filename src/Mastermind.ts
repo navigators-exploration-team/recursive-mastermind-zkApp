@@ -35,6 +35,9 @@ export {
   PER_ATTEMPT_GAME_DURATION,
   NewGameEvent,
   GameAcceptedEvent,
+  RewardClaimEvent,
+  ForfeitGameEvent,
+  ProofSubmissionEvent,
   MastermindZkApp,
 };
 
@@ -48,6 +51,20 @@ class NewGameEvent extends Struct({
 class GameAcceptedEvent extends Struct({
   codeBreakerPubKey: PublicKey,
   finalizeSlot: UInt32,
+}) {}
+
+class RewardClaimEvent extends Struct({
+  claimer: PublicKey,
+}) {}
+
+class ForfeitGameEvent extends Struct({
+  playerPubKey: PublicKey,
+}) {}
+
+class ProofSubmissionEvent extends Struct({
+  turnCount: UInt8,
+  isSolved: Bool,
+  maxAttemptsExceeded: Bool,
 }) {}
 
 class MastermindZkApp extends SmartContract {
@@ -94,6 +111,9 @@ class MastermindZkApp extends SmartContract {
   readonly events = {
     newGame: NewGameEvent,
     gameAccepted: GameAcceptedEvent,
+    rewardClaimed: RewardClaimEvent,
+    gameForfeited: ForfeitGameEvent,
+    proofSubmitted: ProofSubmissionEvent,
   };
 
   /**
@@ -371,6 +391,15 @@ class MastermindZkApp extends SmartContract {
     });
 
     this.compressedState.set(gameState.pack());
+
+    this.emitEvent(
+      'proofSubmitted',
+      new ProofSubmissionEvent({
+        turnCount: proof.publicOutput.turnCount,
+        isSolved,
+        maxAttemptsExceeded,
+      })
+    );
   }
 
   /**
@@ -428,6 +457,13 @@ class MastermindZkApp extends SmartContract {
     });
 
     this.compressedState.set(gameState.pack());
+
+    this.emitEvent(
+      'rewardClaimed',
+      new RewardClaimEvent({
+        claimer,
+      })
+    );
   }
 
   /**
@@ -483,6 +519,13 @@ class MastermindZkApp extends SmartContract {
       isSolved,
     });
     this.compressedState.set(gameState.pack());
+
+    this.emitEvent(
+      'gameForfeited',
+      new ForfeitGameEvent({
+        playerPubKey,
+      })
+    );
   }
 
   /**
