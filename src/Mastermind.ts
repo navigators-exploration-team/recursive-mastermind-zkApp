@@ -34,7 +34,7 @@ import { StepProgramProof } from './stepProgram.js';
 export {
   PER_ATTEMPT_GAME_DURATION,
   NewGameEvent,
-  GameAcceptedEvent,
+  GameAcceptEvent,
   RewardClaimEvent,
   ForfeitGameEvent,
   ProofSubmissionEvent,
@@ -48,7 +48,7 @@ class NewGameEvent extends Struct({
   maxAttempts: UInt8,
 }) {}
 
-class GameAcceptedEvent extends Struct({
+class GameAcceptEvent extends Struct({
   codeBreakerPubKey: PublicKey,
   finalizeSlot: UInt32,
 }) {}
@@ -110,7 +110,7 @@ class MastermindZkApp extends SmartContract {
 
   readonly events = {
     newGame: NewGameEvent,
-    gameAccepted: GameAcceptedEvent,
+    gameAccepted: GameAcceptEvent,
     rewardClaimed: RewardClaimEvent,
     gameForfeited: ForfeitGameEvent,
     proofSubmitted: ProofSubmissionEvent,
@@ -293,7 +293,7 @@ class MastermindZkApp extends SmartContract {
 
     this.emitEvent(
       'gameAccepted',
-      new GameAcceptedEvent({
+      new GameAcceptEvent({
         codeBreakerPubKey: sender,
         finalizeSlot,
       })

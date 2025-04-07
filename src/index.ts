@@ -1,7 +1,7 @@
 import {
   PER_ATTEMPT_GAME_DURATION,
   NewGameEvent,
-  GameAcceptedEvent,
+  GameAcceptEvent,
   RewardClaimEvent,
   ForfeitGameEvent,
   ProofSubmissionEvent,
@@ -32,7 +32,7 @@ import {
 export {
   PER_ATTEMPT_GAME_DURATION,
   NewGameEvent,
-  GameAcceptedEvent,
+  GameAcceptEvent,
   RewardClaimEvent,
   ForfeitGameEvent,
   ProofSubmissionEvent,
