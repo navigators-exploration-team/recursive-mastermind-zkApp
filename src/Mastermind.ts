@@ -51,6 +51,14 @@ class GameAcceptedEvent extends Struct({
 }) {}
 
 class MastermindZkApp extends SmartContract {
+  /**
+   * `compressedState` is the compressed state variable that stores the following game states:
+   * - `rewardAmount`: The amount of tokens to be rewarded to the codeBreaker upon solving the game.
+   * - `finalizeSlot`: The slot at which the game will be finalized.
+   * - `maxAttempts`: The maximum number of total turns allowed for the game.
+   * - `turnCount`: The current turn count of the game.
+   * - `isSolved`: A boolean indicating whether the game has been solved or not.
+   */
   @state(Field) compressedState = State<Field>();
 
   /**
