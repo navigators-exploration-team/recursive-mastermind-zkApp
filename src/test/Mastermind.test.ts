@@ -1,4 +1,4 @@
-import { GAME_DURATION, MastermindZkApp } from '../Mastermind';
+import { PER_ATTEMPT_GAME_DURATION, MastermindZkApp } from '../Mastermind';
 
 import {
   Field,
@@ -302,7 +302,7 @@ describe('Mastermind ZkApp Tests', () => {
   /**
    * Prepare a new game.
    */
-  async function prepareNewGame() {
+  async function prepareNewGame(maxAttempts: number = 7) {
     zkappPrivateKey = PrivateKey.random();
     zkappAddress = zkappPrivateKey.toPublicKey();
     zkapp = new MastermindZkApp(zkappAddress);
@@ -313,7 +313,7 @@ describe('Mastermind ZkApp Tests', () => {
       zkappPrivateKey,
       secretCombination,
       codeMasterSalt,
-      7,
+      maxAttempts,
       refereeKey
     );
 
@@ -325,13 +325,14 @@ describe('Mastermind ZkApp Tests', () => {
    */
   async function expectProofSubmissionToFail(
     proof: StepProgramProof,
+    winnerPubKey: PublicKey,
     expectedMsg?: string
   ) {
     try {
       const tx = await Mina.transaction(
         { sender: codeMasterPubKey, fee },
         async () => {
-          await zkapp.submitGameProof(proof);
+          await zkapp.submitGameProof(proof, winnerPubKey);
         }
       );
 
@@ -347,19 +348,35 @@ describe('Mastermind ZkApp Tests', () => {
   /**
    * Helper function to submit a game proof.
    */
-  async function submitGameProof(proof: StepProgramProof) {
+  async function submitGameProof(
+    proof: StepProgramProof,
+    winnerPubKey: PublicKey,
+    shouldClaim: boolean
+  ) {
+    await fetchAccounts([winnerPubKey, zkappAddress]);
+    const winnerBalance = Mina.getBalance(winnerPubKey);
     const submitGameProofTx = await Mina.transaction(
-      { sender: codeBreakerKey.toPublicKey(), fee },
+      { sender: refereePubKey, fee },
       async () => {
-        await zkapp.submitGameProof(proof);
+        await zkapp.submitGameProof(proof, winnerPubKey ?? codeMasterPubKey);
       }
     );
 
     await waitTransactionAndFetchAccount(
       submitGameProofTx,
-      [codeBreakerKey],
+      [refereeKey],
       [zkappAddress]
     );
+
+    const contractBalance = Mina.getBalance(zkappAddress);
+    expect(Number(contractBalance.toBigInt())).toEqual(
+      shouldClaim ? 0 : 2 * REWARD_AMOUNT
+    );
+
+    const winnerNewBalance = Mina.getBalance(winnerPubKey);
+    expect(
+      Number(winnerNewBalance.toBigInt() - winnerBalance.toBigInt())
+    ).toEqual(shouldClaim ? 2 * REWARD_AMOUNT : 0);
   }
 
   /**
@@ -478,6 +495,28 @@ describe('Mastermind ZkApp Tests', () => {
   }
 
   /**
+   * Helper function to expect make guess to fail.
+   */
+  async function expectMakeGuessToFail(
+    player: PublicKey,
+    playerKey: PrivateKey,
+    unseparatedGuess: Field,
+    expectedMsg?: string
+  ) {
+    try {
+      const tx = await Mina.transaction({ sender: player, fee }, async () => {
+        await zkapp.makeGuess(unseparatedGuess);
+      });
+      await waitTransactionAndFetchAccount(tx, [playerKey]);
+    } catch (error: any) {
+      log(error);
+      expect(error.message).toContain(expectedMsg);
+      return;
+    }
+    throw new Error('Make guess should have failed');
+  }
+
+  /**
    * Helper function to give a clue.
    */
   async function giveClue(
@@ -492,6 +531,29 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     await waitTransactionAndFetchAccount(clueTx, [playerKey], [zkappAddress]);
+  }
+
+  /**
+   * Helper function to expect give clue to fail.
+   */
+  async function expectGiveClueToFail(
+    player: PublicKey,
+    playerKey: PrivateKey,
+    unseparatedCombination: Field,
+    salt: Field,
+    expectedMsg?: string
+  ) {
+    try {
+      const tx = await Mina.transaction({ sender: player, fee }, async () => {
+        await zkapp.giveClue(unseparatedCombination, salt);
+      });
+      await waitTransactionAndFetchAccount(tx, [playerKey]);
+    } catch (error: any) {
+      log(error);
+      expect(error.message).toContain(expectedMsg);
+      return;
+    }
+    throw new Error('Give clue should have failed');
   }
 
   /**
@@ -541,7 +603,12 @@ describe('Mastermind ZkApp Tests', () => {
   async function waitForFinalize() {
     if (localTest) {
       // Move the global slot forward
-      Local.incrementGlobalSlot(GAME_DURATION);
+      let [, maxAttempts] = separateTurnCountAndMaxAttemptSolved(
+        zkapp.turnCountMaxAttemptsIsSolved.get()
+      );
+      Local.incrementGlobalSlot(
+        Number(maxAttempts.toBigInt()) * PER_ATTEMPT_GAME_DURATION
+      );
     } else {
       // Wait for the game duration
       await fetchAccount({ publicKey: zkappAddress });
@@ -562,7 +629,7 @@ describe('Mastermind ZkApp Tests', () => {
   beforeAll(async () => {
     // Compile StepProgram and MastermindZkApp
     await StepProgram.compile({
-      // proofsEnabled,
+      proofsEnabled,
     });
     if (testEnvironment !== 'local') {
       await MastermindZkApp.compile();
@@ -662,6 +729,46 @@ describe('Mastermind ZkApp Tests', () => {
     );
 
     secretCombination = [1, 2, 3, 4];
+
+    // Build a "completedProof" that solves the game
+    // This portion uses your StepProgram to create valid proofs off-chain.
+
+    // 1. createGame
+    partialProof = await StepProgramCreateGame(
+      secretCombination,
+      codeMasterSalt,
+      codeMasterKey
+    );
+
+    // 2. makeGuess
+    partialProof = await StepProgramMakeGuess(
+      partialProof,
+      [2, 1, 3, 4],
+      codeBreakerKey
+    );
+
+    // 3. giveClue
+    partialProof = await StepProgramGiveClue(
+      partialProof,
+      secretCombination,
+      codeMasterSalt,
+      codeMasterKey
+    );
+
+    // 4. second guess
+    completedProof = await StepProgramMakeGuess(
+      partialProof,
+      secretCombination,
+      codeBreakerKey
+    );
+
+    // 5. giveClue & final
+    completedProof = await StepProgramGiveClue(
+      completedProof,
+      secretCombination,
+      codeMasterSalt,
+      codeMasterKey
+    );
   });
 
   describe('Deploy & Initialize Flow', () => {
@@ -684,7 +791,11 @@ describe('Mastermind ZkApp Tests', () => {
 
     it('Reject calling submitGameProof method before initGame', async () => {
       const expectedMsg = 'The game has not been initialized yet!';
-      await expectProofSubmissionToFail(wrongProof, expectedMsg);
+      await expectProofSubmissionToFail(
+        wrongProof,
+        codeMasterPubKey,
+        expectedMsg
+      );
     });
 
     it('Reject initGame if maxAttempts > 15', async () => {
@@ -709,6 +820,42 @@ describe('Mastermind ZkApp Tests', () => {
         codeMasterSalt,
         4,
         refereeKey,
+        expectedMsg
+      );
+    });
+
+    it('Reject initGame if reward amount is 0', async () => {
+      const expectedMsg = 'The reward amount must be greater than zero!';
+      REWARD_AMOUNT = 0;
+      await expectInitializeGameToFail(
+        zkapp,
+        codeMasterKey,
+        secretCombination,
+        codeMasterSalt,
+        5,
+        refereeKey,
+        expectedMsg
+      );
+      REWARD_AMOUNT = 100000;
+    });
+
+    it('Reject makeGuess before initGame', async () => {
+      const expectedMsg = 'The game has not been initialized yet!';
+      await expectMakeGuessToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        compressCombinationDigits([2, 1, 3, 4].map(Field)),
+        expectedMsg
+      );
+    });
+
+    it('Reject giveClue before initGame', async () => {
+      const expectedMsg = 'The game has not been initialized yet!';
+      await expectGiveClueToFail(
+        codeMasterPubKey,
+        codeMasterKey,
+        compressCombinationDigits([2, 1, 3, 4].map(Field)),
+        codeMasterSalt,
         expectedMsg
       );
     });
@@ -758,7 +905,7 @@ describe('Mastermind ZkApp Tests', () => {
     });
   });
 
-  describe('Accepting a Game', () => {
+  describe('Accepting a Game and Solve', () => {
     beforeEach(() => {
       log(expect.getState().currentTestName);
     });
@@ -766,7 +913,34 @@ describe('Mastermind ZkApp Tests', () => {
     it('Reject submitGameProof before acceptGame', async () => {
       const expectedMsg =
         'The game has not been accepted by the codeBreaker yet!';
-      await expectProofSubmissionToFail(wrongProof, expectedMsg);
+      await expectProofSubmissionToFail(
+        wrongProof,
+        codeMasterPubKey,
+        expectedMsg
+      );
+    });
+
+    it('Reject makeGuess before acceptGame', async () => {
+      const expectedMsg =
+        'The game has not been accepted by the codeBreaker yet!';
+      await expectMakeGuessToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        compressCombinationDigits([2, 1, 3, 4].map(Field)),
+        expectedMsg
+      );
+    });
+
+    it('Reject giveClue before acceptGame', async () => {
+      const expectedMsg =
+        'The game has not been accepted by the codeBreaker yet!';
+      await expectGiveClueToFail(
+        codeMasterPubKey,
+        codeMasterKey,
+        compressCombinationDigits([2, 1, 3, 4].map(Field)),
+        codeMasterSalt,
+        expectedMsg
+      );
     });
 
     it('Accept the game successfully', async () => {
@@ -791,7 +965,11 @@ describe('Mastermind ZkApp Tests', () => {
     it('Reject submitting a proof with wrong secret', async () => {
       const expectedMsg =
         'The solution hash is not same as the one stored on-chain!';
-      await expectProofSubmissionToFail(wrongProof, expectedMsg);
+      await expectProofSubmissionToFail(
+        wrongProof,
+        codeBreakerPubKey,
+        expectedMsg
+      );
     });
 
     it('Reject claiming reward before solving', async () => {
@@ -802,86 +980,15 @@ describe('Mastermind ZkApp Tests', () => {
         expectedMsg
       );
     });
-  });
 
-  describe('codeMaster reimbursed reward', () => {
-    beforeAll(async () => {
-      zkappPrivateKey = PrivateKey.random();
-      zkappAddress = zkappPrivateKey.toPublicKey();
-      zkapp = new MastermindZkApp(zkappAddress);
-
-      await deployAndInitializeGame(
-        zkapp,
-        codeMasterKey,
-        zkappPrivateKey,
-        secretCombination,
-        codeMasterSalt,
-        5,
-        refereeKey
-      );
+    it('Reject reward claim from intruder', async () => {
+      const expectedMsg =
+        'You are not the codeMaster or codeBreaker of this game!';
+      await expectClaimRewardToFail(intruderPubKey, intruderKey, expectedMsg);
     });
 
-    beforeEach(() => {
-      log(expect.getState().currentTestName);
-    });
-
-    it('codeMaster reimbursed reward succesfully', async () => {
-      await claimReward(codeMasterPubKey, codeMasterKey, true);
-    });
-
-    // TODO: Add test
-  });
-
-  describe('Submitting Correct Game Proof and Claiming Reward', () => {
-    beforeAll(async () => {
-      await prepareNewGame();
-      // Build a "completedProof" that solves the game
-      // This portion uses your StepProgram to create valid proofs off-chain.
-
-      // 1. createGame
-      partialProof = await StepProgramCreateGame(
-        secretCombination,
-        codeMasterSalt,
-        codeMasterKey
-      );
-
-      // 2. makeGuess
-      partialProof = await StepProgramMakeGuess(
-        partialProof,
-        [2, 1, 3, 4],
-        codeBreakerKey
-      );
-
-      // 3. giveClue
-      partialProof = await StepProgramGiveClue(
-        partialProof,
-        secretCombination,
-        codeMasterSalt,
-        codeMasterKey
-      );
-
-      // 4. second guess
-      completedProof = await StepProgramMakeGuess(
-        partialProof,
-        secretCombination,
-        codeBreakerKey
-      );
-
-      // 5. giveClue & final
-      completedProof = await StepProgramGiveClue(
-        completedProof,
-        secretCombination,
-        codeMasterSalt,
-        codeMasterKey
-      );
-    });
-
-    beforeEach(() => {
-      log(expect.getState().currentTestName);
-    });
-
-    it('Submit with correct game proof', async () => {
-      await submitGameProof(completedProof);
+    it('Submit with correct game proof and wrong winner', async () => {
+      await submitGameProof(completedProof, codeMasterPubKey, false);
 
       const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
         zkapp.turnCountMaxAttemptsIsSolved.get()
@@ -919,20 +1026,84 @@ describe('Mastermind ZkApp Tests', () => {
 
     it('Reject submitting the same proof again', async () => {
       const expectedMsg = 'The game secret has already been solved!';
-      await expectProofSubmissionToFail(completedProof, expectedMsg);
+      await expectProofSubmissionToFail(
+        completedProof,
+        codeBreakerPubKey,
+        expectedMsg
+      );
     });
 
-    it('Reject reward claim from intruder', async () => {
-      const expectedMsg =
-        'You are not the codeMaster or codeBreaker of this game!';
-      await expectClaimRewardToFail(intruderPubKey, intruderKey, expectedMsg);
+    it('Claim reward successfully', async () => {
+      await claimReward(codeBreakerPubKey, codeBreakerKey);
     });
+  });
 
-    it('Reject codeMaster claim if they lost', async () => {
-      const expectedMsg = 'You are not the winner of this game!';
-      await expectClaimRewardToFail(
-        codeMasterPubKey,
+  describe('codeMaster reimbursed reward', () => {
+    beforeAll(async () => {
+      zkappPrivateKey = PrivateKey.random();
+      zkappAddress = zkappPrivateKey.toPublicKey();
+      zkapp = new MastermindZkApp(zkappAddress);
+
+      await deployAndInitializeGame(
+        zkapp,
         codeMasterKey,
+        zkappPrivateKey,
+        secretCombination,
+        codeMasterSalt,
+        5,
+        refereeKey
+      );
+    });
+
+    beforeEach(() => {
+      log(expect.getState().currentTestName);
+    });
+
+    it('codeMaster reimbursed reward succesfully', async () => {
+      await claimReward(codeMasterPubKey, codeMasterKey, true);
+    });
+
+    it('Reject accepting the game after reimbursed', async () => {
+      const expectedMsg = 'Code master reimbursement is already claimed!';
+      await expectAcceptGameToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        expectedMsg
+      );
+    });
+  });
+
+  describe('Submitting Correct Game Proof and Claiming Reward', () => {
+    beforeAll(async () => {
+      await prepareNewGame();
+    });
+
+    beforeEach(() => {
+      log(expect.getState().currentTestName);
+    });
+
+    it('Submit with partial game proof', async () => {
+      await submitGameProof(partialProof, codeBreakerPubKey, false);
+    });
+
+    it('Reject submitting the same partial proof again', async () => {
+      const expectedMsg = 'Cannot submit a proof for a previous turn!';
+      await expectProofSubmissionToFail(
+        partialProof,
+        codeBreakerPubKey,
+        expectedMsg
+      );
+    });
+
+    it('Submit with correct game proof with wrong winner', async () => {
+      await submitGameProof(completedProof, codeMasterPubKey, false);
+    });
+
+    it('Reject submitting the same proof again', async () => {
+      const expectedMsg = 'The game secret has already been solved!';
+      await expectProofSubmissionToFail(
+        partialProof,
+        codeBreakerPubKey,
         expectedMsg
       );
     });
@@ -1089,7 +1260,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       const publicOutputs = CMVictoryProof.publicOutput;
 
-      await submitGameProof(CMVictoryProof);
+      await submitGameProof(CMVictoryProof, codeMasterPubKey, true);
 
       const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
         zkapp.turnCountMaxAttemptsIsSolved.get()
@@ -1110,7 +1281,6 @@ describe('Mastermind ZkApp Tests', () => {
         codeBreakerKey,
         expectedMsg
       );
-      await claimReward(codeMasterPubKey, codeMasterKey);
     });
 
     it('Should generate a proof with predefined actions for codeMaster victory and settle.', async () => {
@@ -1131,7 +1301,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       const publicOutputs = CMVictoryProof.publicOutput;
 
-      await submitGameProof(CMVictoryProof);
+      await submitGameProof(CMVictoryProof, codeMasterPubKey, true);
 
       const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
         zkapp.turnCountMaxAttemptsIsSolved.get()
@@ -1162,7 +1332,6 @@ describe('Mastermind ZkApp Tests', () => {
         codeBreakerKey,
         expectedMsg
       );
-      await claimReward(codeMasterPubKey, codeMasterKey);
     });
 
     it('Should generate a proof with randomly chosen actions for codeBreaker victory and settle.', async () => {
@@ -1180,7 +1349,7 @@ describe('Mastermind ZkApp Tests', () => {
         codeMasterKey
       );
 
-      await submitGameProof(CBVictoryProof);
+      await submitGameProof(CBVictoryProof, codeBreakerPubKey, true);
 
       const publicOutputs = CBVictoryProof.publicOutput;
 
@@ -1203,7 +1372,6 @@ describe('Mastermind ZkApp Tests', () => {
         codeMasterKey,
         expectedMsg
       );
-      await claimReward(codeBreakerPubKey, codeBreakerKey);
     });
 
     it('Should generate a proof with predefined actions for codeBreaker victory and settle.', async () => {
@@ -1222,7 +1390,7 @@ describe('Mastermind ZkApp Tests', () => {
         gameGuesses
       );
 
-      await submitGameProof(CBVictoryProof);
+      await submitGameProof(CBVictoryProof, codeBreakerPubKey, true);
 
       const publicOutputs = CBVictoryProof.publicOutput;
 
@@ -1257,7 +1425,6 @@ describe('Mastermind ZkApp Tests', () => {
         codeMasterKey,
         expectedMsg
       );
-      await claimReward(codeBreakerPubKey, codeBreakerKey);
     });
 
     it('Should generate a proof with randomly chosen actions for unsolved game and fail to settle.', async () => {
@@ -1276,7 +1443,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       const publicOutputs = unsolvedProof.publicOutput;
 
-      await submitGameProof(unsolvedProof);
+      await submitGameProof(unsolvedProof, codeBreakerPubKey, false);
 
       const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
         zkapp.turnCountMaxAttemptsIsSolved.get()
@@ -1318,7 +1485,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       const publicOutputs = unsolvedProof.publicOutput;
 
-      await submitGameProof(unsolvedProof);
+      await submitGameProof(unsolvedProof, codeBreakerPubKey, false);
 
       const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
         zkapp.turnCountMaxAttemptsIsSolved.get()
