@@ -1,4 +1,5 @@
 import {
+  MastermindZkApp,
   PER_ATTEMPT_GAME_DURATION,
   NewGameEvent,
   GameAcceptEvent,
@@ -30,6 +31,7 @@ import {
 } from './utils.js';
 
 export {
+  MastermindZkApp,
   PER_ATTEMPT_GAME_DURATION,
   NewGameEvent,
   GameAcceptEvent,
