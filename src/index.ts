@@ -1,4 +1,11 @@
-import { MastermindZkApp } from './Mastermind.js';
+import {
+  PER_ATTEMPT_GAME_DURATION,
+  NewGameEvent,
+  GameAcceptedEvent,
+  RewardClaimEvent,
+  ForfeitGameEvent,
+  ProofSubmissionEvent,
+} from './Mastermind.js';
 import {
   StepProgram,
   StepProgramProof,
@@ -19,10 +26,16 @@ import {
   deserializeCombinationHistory,
   updateElementAtIndex,
   getElementAtIndex,
+  GameState,
 } from './utils.js';
 
 export {
-  MastermindZkApp,
+  PER_ATTEMPT_GAME_DURATION,
+  NewGameEvent,
+  GameAcceptedEvent,
+  RewardClaimEvent,
+  ForfeitGameEvent,
+  ProofSubmissionEvent,
   StepProgram,
   PublicInputs,
   PublicOutputs,
@@ -40,4 +53,5 @@ export {
   deserializeCombinationHistory,
   updateElementAtIndex,
   getElementAtIndex,
+  GameState,
 };
