@@ -8,19 +8,17 @@ import {
   AccountUpdate,
   Poseidon,
   UInt64,
-  UInt32,
   fetchAccount,
   fetchLastBlock,
   Lightnet,
+  UInt8,
 } from 'o1js';
 
 import {
   compressCombinationDigits,
-  compressRewardAndFinalizeSlot,
-  compressTurnCountMaxAttemptSolved,
   deserializeCombinationHistory,
+  GameState,
   separateCombinationDigits,
-  separateTurnCountAndMaxAttemptSolved,
   serializeClue,
   serializeClueHistory,
   serializeCombinationHistory,
@@ -201,7 +199,7 @@ describe('Mastermind ZkApp Tests', () => {
         await zkapp.initGame(
           unseparatedCombination,
           salt,
-          Field.from(maxAttempt),
+          UInt8.from(maxAttempt),
           refereeAccount,
           UInt64.from(REWARD_AMOUNT)
         );
@@ -236,7 +234,7 @@ describe('Mastermind ZkApp Tests', () => {
           await zkapp.initGame(
             unseparatedCombination,
             salt,
-            Field.from(maxAttempt),
+            UInt8.from(maxAttempt),
             refereeAccount,
             UInt64.from(REWARD_AMOUNT)
           );
@@ -285,7 +283,7 @@ describe('Mastermind ZkApp Tests', () => {
         await zkapp.initGame(
           unseparatedCombination,
           salt,
-          Field.from(maxAttempt),
+          UInt8.from(maxAttempt),
           refereeAccount,
           UInt64.from(REWARD_AMOUNT)
         );
@@ -302,7 +300,7 @@ describe('Mastermind ZkApp Tests', () => {
   /**
    * Prepare a new game.
    */
-  async function prepareNewGame(maxAttempts: number = 7) {
+  async function prepareNewGame(maxAttempts: number = 4) {
     zkappPrivateKey = PrivateKey.random();
     zkappAddress = zkappPrivateKey.toPublicKey();
     zkapp = new MastermindZkApp(zkappAddress);
@@ -603,19 +601,18 @@ describe('Mastermind ZkApp Tests', () => {
   async function waitForFinalize() {
     if (localTest) {
       // Move the global slot forward
-      let [, maxAttempts] = separateTurnCountAndMaxAttemptSolved(
-        zkapp.turnCountMaxAttemptsIsSolved.get()
-      );
+
+      let { maxAttempts } = GameState.unpack(zkapp.compressedState.get());
       Local.incrementGlobalSlot(
         Number(maxAttempts.toBigInt()) * PER_ATTEMPT_GAME_DURATION
       );
     } else {
       // Wait for the game duration
       await fetchAccount({ publicKey: zkappAddress });
-      let finalizeSlot = zkapp.rewardFinalizeSlot.get();
+      let { finalizeSlot } = GameState.unpack(zkapp.compressedState.get());
       while (true) {
         let currentSlot = await getGlobalSlot();
-        if (currentSlot >= finalizeSlot.toBigInt()) {
+        if (currentSlot >= finalizeSlot.toBigint()) {
           break;
         }
 
@@ -798,27 +795,27 @@ describe('Mastermind ZkApp Tests', () => {
       );
     });
 
-    it('Reject initGame if maxAttempts > 15', async () => {
-      const expectedMsg = 'The maximum number of attempts allowed is 15!';
+    it('Reject initGame if maxAttempts > 5', async () => {
+      const expectedMsg = 'The maximum number of attempts allowed is 5!';
       await expectInitializeGameToFail(
         zkapp,
         codeMasterKey,
         secretCombination,
         codeMasterSalt,
-        20,
+        6,
         refereeKey,
         expectedMsg
       );
     });
 
-    it('Reject initGame if maxAttempts < 5', async () => {
-      const expectedMsg = 'The minimum number of attempts allowed is 5!';
+    it('Reject initGame if maxAttempts < 3', async () => {
+      const expectedMsg = 'The minimum number of attempts allowed is 3!';
       await expectInitializeGameToFail(
         zkapp,
         codeMasterKey,
         secretCombination,
         codeMasterSalt,
-        4,
+        2,
         refereeKey,
         expectedMsg
       );
@@ -861,19 +858,23 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Initializes the game successfully', async () => {
-      const maxAttempts = 5;
       await initializeGame(
         zkapp,
         codeMasterKey,
         secretCombination,
         codeMasterSalt,
-        maxAttempts,
+        5,
         refereeKey
       );
 
-      expect(zkapp.turnCountMaxAttemptsIsSolved.get()).toEqual(
-        compressTurnCountMaxAttemptSolved([1, maxAttempts, 0].map(Field))
-      );
+      let { rewardAmount, finalizeSlot, turnCount, maxAttempts, isSolved } =
+        GameState.unpack(zkapp.compressedState.get());
+
+      expect(rewardAmount.toBigInt()).toEqual(BigInt(REWARD_AMOUNT));
+      expect(finalizeSlot.toBigint()).toEqual(0n);
+      expect(turnCount.toBigInt()).toEqual(1n);
+      expect(maxAttempts.toString()).toEqual('5');
+      expect(isSolved.toBoolean()).toEqual(false);
       expect(zkapp.codeMasterId.get()).toEqual(
         Poseidon.hash(codeMasterPubKey.toFields())
       );
@@ -885,12 +886,6 @@ describe('Mastermind ZkApp Tests', () => {
           ...separateCombinationDigits(Field(1234)),
           codeMasterSalt,
         ])
-      );
-      expect(zkapp.rewardFinalizeSlot.get()).toEqual(
-        compressRewardAndFinalizeSlot(
-          UInt64.from(REWARD_AMOUNT),
-          UInt32.from(0)
-        )
       );
 
       // All other fields should be 0
@@ -990,14 +985,14 @@ describe('Mastermind ZkApp Tests', () => {
     it('Submit with correct game proof and wrong winner', async () => {
       await submitGameProof(completedProof, codeMasterPubKey, false);
 
-      const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
-        zkapp.turnCountMaxAttemptsIsSolved.get()
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
       );
 
       expect(turnCount.toBigInt()).toEqual(
         completedProof.publicOutput.turnCount.toBigInt()
       );
-      expect(isSolved.toBigInt()).toEqual(1n);
+      expect(isSolved.toBoolean()).toEqual(true);
 
       expect(zkapp.codeBreakerId.get()).toEqual(
         Poseidon.hash(codeBreakerPubKey.toFields())
@@ -1262,15 +1257,15 @@ describe('Mastermind ZkApp Tests', () => {
 
       await submitGameProof(CMVictoryProof, codeMasterPubKey, true);
 
-      const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
-        zkapp.turnCountMaxAttemptsIsSolved.get()
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
       );
 
       expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
 
       expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
 
-      expect(isSolved.toBigInt()).toEqual(0n);
+      expect(isSolved.toBoolean()).toEqual(false);
 
       expect(zkapp.codeBreakerId.get()).toEqual(
         Poseidon.hash(codeBreakerPubKey.toFields())
@@ -1303,8 +1298,8 @@ describe('Mastermind ZkApp Tests', () => {
 
       await submitGameProof(CMVictoryProof, codeMasterPubKey, true);
 
-      const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
-        zkapp.turnCountMaxAttemptsIsSolved.get()
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
       );
 
       const attemptList = gameGuesses.totalAttempts.slice(0, rounds);
@@ -1321,7 +1316,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
 
-      expect(isSolved.toBigInt()).toEqual(0n);
+      expect(isSolved.toBoolean()).toEqual(false);
 
       expect(zkapp.codeBreakerId.get()).toEqual(
         Poseidon.hash(codeBreakerPubKey.toFields())
@@ -1335,7 +1330,7 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Should generate a proof with randomly chosen actions for codeBreaker victory and settle.', async () => {
-      const rounds = 5;
+      const rounds = 3;
       const winnerFlag = 'codebreaker-victory';
 
       const expectedMsg = 'You are not the winner of this game!';
@@ -1353,15 +1348,15 @@ describe('Mastermind ZkApp Tests', () => {
 
       const publicOutputs = CBVictoryProof.publicOutput;
 
-      const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
-        zkapp.turnCountMaxAttemptsIsSolved.get()
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
       );
 
       expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
 
       expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
 
-      expect(isSolved.toBigInt()).toEqual(1n);
+      expect(isSolved.toBoolean()).toEqual(true);
 
       expect(zkapp.codeBreakerId.get()).toEqual(
         Poseidon.hash(codeBreakerPubKey.toFields())
@@ -1375,7 +1370,7 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Should generate a proof with predefined actions for codeBreaker victory and settle.', async () => {
-      const rounds = 5;
+      const rounds = 3;
       const winnerFlag = 'codebreaker-victory';
 
       const expectedMsg = 'You are not the winner of this game!';
@@ -1394,8 +1389,8 @@ describe('Mastermind ZkApp Tests', () => {
 
       const publicOutputs = CBVictoryProof.publicOutput;
 
-      const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
-        zkapp.turnCountMaxAttemptsIsSolved.get()
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
       );
 
       const attemptList = gameGuesses.totalAttempts.slice(0, rounds - 1);
@@ -1414,7 +1409,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
 
-      expect(isSolved.toBigInt()).toEqual(1n);
+      expect(isSolved.toBoolean()).toEqual(true);
 
       expect(zkapp.codeBreakerId.get()).toEqual(
         Poseidon.hash(codeBreakerPubKey.toFields())
@@ -1428,7 +1423,7 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Should generate a proof with randomly chosen actions for unsolved game and fail to settle.', async () => {
-      const rounds = 5;
+      const rounds = 3;
       const expectedMsg = 'You are not the winner of this game!';
       const winnerFlag = 'unsolved';
 
@@ -1445,13 +1440,13 @@ describe('Mastermind ZkApp Tests', () => {
 
       await submitGameProof(unsolvedProof, codeBreakerPubKey, false);
 
-      const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
-        zkapp.turnCountMaxAttemptsIsSolved.get()
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
       );
 
       expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
       expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
-      expect(isSolved.toBigInt()).toEqual(0n);
+      expect(isSolved.toBoolean()).toEqual(false);
       expect(zkapp.codeBreakerId.get()).toEqual(
         Poseidon.hash(codeBreakerPubKey.toFields())
       );
@@ -1469,7 +1464,7 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Should generate a proof with predefined actions for unsolved game and fail to settle.', async () => {
-      const rounds = 5;
+      const rounds = 3;
       const expectedMsg = 'You are not the winner of this game!';
       const winnerFlag = 'unsolved';
 
@@ -1487,8 +1482,8 @@ describe('Mastermind ZkApp Tests', () => {
 
       await submitGameProof(unsolvedProof, codeBreakerPubKey, false);
 
-      const [turnCount, , isSolved] = separateTurnCountAndMaxAttemptSolved(
-        zkapp.turnCountMaxAttemptsIsSolved.get()
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
       );
 
       const attemptList = gameGuesses.totalAttempts.slice(0, rounds);
@@ -1503,7 +1498,7 @@ describe('Mastermind ZkApp Tests', () => {
       expect(separatedHistory).toEqual(attemptList);
       expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
       expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
-      expect(isSolved.toBigInt()).toEqual(0n);
+      expect(isSolved.toBoolean()).toEqual(false);
       expect(zkapp.codeBreakerId.get()).toEqual(
         Poseidon.hash(codeBreakerPubKey.toFields())
       );
