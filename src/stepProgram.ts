@@ -34,7 +34,7 @@ class PublicOutputs extends Struct({
   codeBreakerId: Field,
   solutionHash: Field,
   lastCompressedGuess: Field,
-  compressedClue: Field,
+  lastcompressedClue: Field,
   turnCount: UInt8,
   packedGuessHistory: Field,
   packedClueHistory: Field,
@@ -73,7 +73,7 @@ const StepProgram = ZkProgram({
             codeBreakerId: Field.from(0),
             solutionHash: Poseidon.hash([...secretCombination.digits, salt]),
             lastCompressedGuess: Field.from(0),
-            compressedClue: Field.from(0),
+            lastcompressedClue: Field.from(0),
             turnCount: UInt8.from(1),
             packedGuessHistory: Field.from(0),
             packedClueHistory: Field.from(0),
@@ -112,7 +112,7 @@ const StepProgram = ZkProgram({
           ])
           .assertTrue('You are not the codeBreaker of this game!');
 
-        Clue.decompress(previousClue.publicOutput.compressedClue)
+        Clue.decompress(previousClue.publicOutput.lastcompressedClue)
           .isSolved()
           .assertFalse('You have already solved the secret combination!');
 
@@ -214,7 +214,7 @@ const StepProgram = ZkProgram({
         return {
           publicOutput: new PublicOutputs({
             ...previousGuess.publicOutput,
-            compressedClue: clue.compress(),
+            lastcompressedClue: clue.compress(),
             turnCount: previousGuess.publicOutput.turnCount.add(1),
             packedClueHistory,
           }),

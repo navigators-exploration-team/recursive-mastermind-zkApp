@@ -31,7 +31,7 @@ export {
 };
 
 const PER_ATTEMPT_GAME_DURATION = 2; // 2 slots (6 minute) per attempt
-const MAX_ATTEMPTS = 10;
+const MAX_ATTEMPTS = 7;
 
 class NewGameEvent extends Struct({
   rewardAmount: UInt64,
@@ -322,7 +322,7 @@ class MastermindZkApp extends SmartContract {
       MAX_ATTEMPTS * 2
     );
 
-    const clue = Clue.decompress(proof.publicOutput.compressedClue);
+    const clue = Clue.decompress(proof.publicOutput.lastcompressedClue);
     isSolved = clue.isSolved().and(maxAttemptsExceeded.not());
 
     this.packedGuessHistory.set(proof.publicOutput.packedGuessHistory);
