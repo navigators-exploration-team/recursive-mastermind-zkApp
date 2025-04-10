@@ -1,12 +1,5 @@
-import { Field, PrivateKey, PublicKey, Poseidon, Signature } from 'o1js';
-import {
-  compressCombinationDigits,
-  deserializeClue,
-  deserializeClueHistory,
-  deserializeCombinationHistory,
-  separateCombinationDigits,
-  serializeClue,
-} from '../utils';
+import { Field, PrivateKey, PublicKey, Poseidon } from 'o1js';
+import { Combination, Clue } from '../utils';
 import { StepProgram, StepProgramProof } from '../stepProgram';
 import {
   StepProgramCreateGame,
@@ -28,8 +21,11 @@ describe('Mastermind ZkProgram Tests', () => {
   let codeBreakerId: Field;
 
   // Compressed secret combination for codeMaster
-  let secretCombination: number[];
-  let unseparatedSecretCombination: Field;
+  let secretNumbers: number[];
+  let secretCombination: Combination;
+  let lastGuessNumbers: number[];
+  let lastGuess: Combination;
+  let lastClue: Clue;
 
   // Hold the last proof we produced
   let lastProof: StepProgramProof;
@@ -44,8 +40,8 @@ describe('Mastermind ZkProgram Tests', () => {
     codeMasterId = Poseidon.hash(codeMasterPubKey.toFields());
 
     // Generate secret combination for the codeMaster
-    secretCombination = [1, 2, 3, 4];
-    unseparatedSecretCombination = Field.from(1234);
+    secretNumbers = [1, 2, 3, 4];
+    secretCombination = Combination.from(secretNumbers);
 
     // Generate random field as salt for the codeMaster
     codeMasterSalt = Field.random();
@@ -91,7 +87,8 @@ describe('Mastermind ZkProgram Tests', () => {
 
   describe('createGame method', () => {
     it('Should reject codeMaster with invalid secret combination: second digit is 0', async () => {
-      const expectedErrorMessage = 'Combination digit 2 should not be zero!';
+      const expectedErrorMessage =
+        'Combination digit 2 is not in range [1, 7]!';
       await expectCreateGameToFail([5, 0, 4, 6], expectedErrorMessage);
     });
 
@@ -102,7 +99,7 @@ describe('Mastermind ZkProgram Tests', () => {
 
     it('Should create a game successfully', async () => {
       lastProof = await StepProgramCreateGame(
-        secretCombination,
+        secretNumbers,
         codeMasterSalt,
         codeMasterKey
       );
@@ -110,15 +107,12 @@ describe('Mastermind ZkProgram Tests', () => {
       const publicOutputs = lastProof.publicOutput;
 
       expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
-      expect(publicOutputs.codeBreakerId).toEqual(Field.empty());
+      expect(publicOutputs.codeBreakerId).toEqual(Field.from(0));
       expect(publicOutputs.solutionHash).toEqual(
-        Poseidon.hash([
-          ...separateCombinationDigits(unseparatedSecretCombination),
-          codeMasterSalt,
-        ])
+        Poseidon.hash([...secretCombination.digits, codeMasterSalt])
       );
-      expect(publicOutputs.lastGuess).toEqual(Field.empty());
-      expect(publicOutputs.serializedClue).toEqual(Field.empty());
+      expect(publicOutputs.lastCompressedGuess).toEqual(Field.from(0));
+      expect(publicOutputs.lastcompressedClue).toEqual(Field.from(0));
       expect(publicOutputs.turnCount.toBigInt()).toEqual(1n);
       expect(publicOutputs.packedClueHistory).toEqual(Field.from(0));
       expect(publicOutputs.packedGuessHistory).toEqual(Field.from(0));
@@ -126,8 +120,9 @@ describe('Mastermind ZkProgram Tests', () => {
   });
 
   describe('makeGuess method tests: first guess', () => {
-    it('Should reject codeBreaker with invalid guess combination: fouth digit is 0', async () => {
-      const expectedErrorMessage = 'Combination digit 4 should not be zero!';
+    it('Should reject codeBreaker with invalid guess combination: second greater than 7 and fouth digit is 0', async () => {
+      const expectedErrorMessage =
+        'Combination digit 2 is not in range [1, 7]!';
       await expectGuessToFail([6, 9, 3, 0], expectedErrorMessage);
     });
 
@@ -143,31 +138,28 @@ describe('Mastermind ZkProgram Tests', () => {
     });
 
     it('CodeBreaker should make a guess successfully', async () => {
-      const firstGuess = [1, 5, 6, 2];
-      const unseparatedGuess = compressCombinationDigits(firstGuess.map(Field));
+      lastGuessNumbers = [1, 5, 6, 2];
+      lastGuess = Combination.from(lastGuessNumbers);
       lastProof = await StepProgramMakeGuess(
         lastProof,
-        firstGuess,
+        lastGuessNumbers,
         codeBreakerKey
       );
 
       const publicOutputs = lastProof.publicOutput;
-      const deserializedGuess = deserializeCombinationHistory(
-        publicOutputs.packedGuessHistory
-      )[0];
 
-      expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
       expect(publicOutputs.codeBreakerId).toEqual(codeBreakerId);
-      expect(publicOutputs.solutionHash).toEqual(
-        lastProof.publicOutput.solutionHash
+      expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
+      expect(publicOutputs.lastCompressedGuess).toEqual(lastGuess.compress());
+      expect(publicOutputs.lastcompressedClue).toEqual(Field.from(0));
+      expect(publicOutputs.packedClueHistory).toEqual(Field.from(0));
+      expect(publicOutputs.packedGuessHistory).toEqual(
+        Combination.updateHistory(lastGuess, Field.from(0), Field.from(0))
       );
-
-      expect(publicOutputs.lastGuess).toEqual(unseparatedGuess);
-      expect(publicOutputs.lastGuess).toEqual(unseparatedGuess);
-      expect(publicOutputs.lastGuess).toEqual(deserializedGuess);
-      expect(publicOutputs.serializedClue).toEqual(Field.empty());
+      expect(publicOutputs.solutionHash).toEqual(
+        Poseidon.hash([...secretCombination.digits, codeMasterSalt])
+      );
       expect(publicOutputs.turnCount.toBigInt()).toEqual(2n);
-      expect(deserializedGuess).toEqual(unseparatedGuess);
     });
 
     it('Should reject makeGuess in the wrong turn', async () => {
@@ -210,29 +202,38 @@ describe('Mastermind ZkProgram Tests', () => {
     it('CodeMaster should give clue successfully', async () => {
       lastProof = await StepProgramGiveClue(
         lastProof,
-        [1, 2, 3, 4],
+        secretNumbers,
         codeMasterSalt,
         codeMasterKey
       );
 
-      const publicOutputs = lastProof.publicOutput;
+      lastClue = Clue.giveClue(lastGuess.digits, secretCombination.digits);
 
-      const deserializedClue = deserializeClueHistory(
-        publicOutputs.packedClueHistory
-      )[0];
-
-      expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
-      expect(publicOutputs.codeBreakerId).toEqual(codeBreakerId);
-      expect(publicOutputs.solutionHash).toEqual(
-        lastProof.publicOutput.solutionHash
+      expect(lastClue.compress()).toEqual(
+        new Clue({
+          hits: Field.from(1),
+          blows: Field.from(1),
+        }).compress()
       );
-      expect(publicOutputs.lastGuess).toEqual(Field.from(1562));
 
-      expect(publicOutputs.serializedClue).toEqual(
-        serializeClue([2, 0, 0, 1].map(Field))
+      const publicOutputs = lastProof.publicOutput;
+      expect(publicOutputs.codeBreakerId).toEqual(codeBreakerId);
+      expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
+      expect(publicOutputs.solutionHash).toEqual(
+        Poseidon.hash([...secretCombination.digits, codeMasterSalt])
+      );
+      expect(publicOutputs.lastCompressedGuess).toEqual(lastGuess.compress());
+      expect(publicOutputs.lastcompressedClue).toEqual(lastClue.compress());
+      expect(publicOutputs.packedClueHistory).toEqual(
+        Clue.updateHistory(lastClue, Field.from(0), Field.from(0))
+      );
+      expect(publicOutputs.packedGuessHistory).toEqual(
+        lastProof.publicOutput.packedGuessHistory
       );
       expect(publicOutputs.turnCount.toBigInt()).toEqual(3n);
-      expect(publicOutputs.packedClueHistory).toEqual(deserializedClue);
+      expect(
+        Clue.decompress(publicOutputs.lastcompressedClue).isSolved().toBoolean()
+      ).toEqual(false);
     });
 
     it('Should reject the codeMaster from calling this method out of sequence', async () => {
@@ -253,26 +254,31 @@ describe('Mastermind ZkProgram Tests', () => {
     });
 
     it('Should accept another valid guess', async () => {
-      const secondGuess = [1, 4, 7, 2];
-      const unseparatedGuess = compressCombinationDigits(
-        secondGuess.map(Field)
-      );
+      lastGuessNumbers = [1, 4, 7, 2];
+      lastGuess = Combination.from(lastGuessNumbers);
+      const guessHistory = lastProof.publicOutput.packedGuessHistory;
 
       lastProof = await StepProgramMakeGuess(
         lastProof,
-        secondGuess,
+        lastGuessNumbers,
         codeBreakerKey
       );
 
       const publicOutputs = lastProof.publicOutput;
-      const [firstData, secondData] = deserializeCombinationHistory(
-        publicOutputs.packedGuessHistory
+      expect(publicOutputs.codeBreakerId).toEqual(codeBreakerId);
+      expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
+      expect(publicOutputs.lastCompressedGuess).toEqual(lastGuess.compress());
+      expect(publicOutputs.lastcompressedClue).toEqual(lastClue.compress());
+      expect(publicOutputs.packedClueHistory).toEqual(
+        Clue.updateHistory(lastClue, Field.from(0), Field.from(0))
       );
-
-      expect(publicOutputs.lastGuess).toEqual(unseparatedGuess);
+      expect(publicOutputs.packedGuessHistory).toEqual(
+        Combination.updateHistory(lastGuess, guessHistory, Field.from(1))
+      );
+      expect(publicOutputs.solutionHash).toEqual(
+        Poseidon.hash([...secretCombination.digits, codeMasterSalt])
+      );
       expect(publicOutputs.turnCount.toBigInt()).toEqual(4n);
-      expect(firstData).toEqual(Field.from(1562));
-      expect(secondData).toEqual(unseparatedGuess);
     });
 
     it('Should reject the codebraker from calling this method out of sequence', async () => {
@@ -284,53 +290,56 @@ describe('Mastermind ZkProgram Tests', () => {
 
   describe('New game after completion', () => {
     it('Should create a new game successfully with new secret', async () => {
-      // Generate new secret combination for the codeMaster
-      secretCombination = [7, 1, 6, 3];
-      unseparatedSecretCombination = Field.from(7163);
+      secretNumbers = [7, 1, 6, 3];
+      secretCombination = Combination.from(secretNumbers);
 
       lastProof = await StepProgramCreateGame(
-        secretCombination,
+        secretNumbers,
         codeMasterSalt,
         codeMasterKey
       );
 
       const publicOutputs = lastProof.publicOutput;
       expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
-      expect(publicOutputs.codeBreakerId).toEqual(Field.empty());
+      expect(publicOutputs.codeBreakerId).toEqual(Field.from(0));
       expect(publicOutputs.solutionHash).toEqual(
-        Poseidon.hash([
-          ...separateCombinationDigits(unseparatedSecretCombination),
-          codeMasterSalt,
-        ])
+        Poseidon.hash([...secretCombination.digits, codeMasterSalt])
       );
-      expect(publicOutputs.lastGuess).toEqual(Field.empty());
-      expect(publicOutputs.serializedClue).toEqual(Field.empty());
+      expect(publicOutputs.lastCompressedGuess).toEqual(Field.from(0));
+      expect(publicOutputs.lastcompressedClue).toEqual(Field.from(0));
       expect(publicOutputs.turnCount.toBigInt()).toEqual(1n);
+      expect(publicOutputs.packedClueHistory).toEqual(Field.from(0));
+      expect(publicOutputs.packedGuessHistory).toEqual(Field.from(0));
     });
 
     it('Should solve the game in the first round', async () => {
-      const firstGuess = [7, 1, 6, 3];
-      const unseparatedGuess = compressCombinationDigits(firstGuess.map(Field));
+      lastGuessNumbers = [7, 1, 6, 3];
+      lastGuess = Combination.from(lastGuessNumbers);
 
       lastProof = await StepProgramMakeGuess(
         lastProof,
-        firstGuess,
+        lastGuessNumbers,
         codeBreakerKey
       );
 
       const publicOutputs = lastProof.publicOutput;
 
-      expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
       expect(publicOutputs.codeBreakerId).toEqual(codeBreakerId);
-      expect(publicOutputs.solutionHash).toEqual(
-        lastProof.publicOutput.solutionHash
+      expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
+      expect(publicOutputs.lastCompressedGuess).toEqual(lastGuess.compress());
+      expect(publicOutputs.lastcompressedClue).toEqual(Field.from(0));
+      expect(publicOutputs.packedClueHistory).toEqual(Field.from(0));
+      expect(publicOutputs.packedGuessHistory).toEqual(
+        Combination.updateHistory(lastGuess, Field.from(0), Field.from(0))
       );
-      expect(publicOutputs.lastGuess).toEqual(unseparatedGuess);
-      expect(publicOutputs.serializedClue).toEqual(Field.empty());
+      expect(publicOutputs.solutionHash).toEqual(
+        Poseidon.hash([...secretCombination.digits, codeMasterSalt])
+      );
       expect(publicOutputs.turnCount.toBigInt()).toEqual(2n);
     });
 
     it('Should give clue and report that the secret is solved', async () => {
+      lastClue = Clue.giveClue(lastGuess.digits, secretCombination.digits);
       lastProof = await StepProgramGiveClue(
         lastProof,
         [7, 1, 6, 3],
@@ -338,23 +347,31 @@ describe('Mastermind ZkProgram Tests', () => {
         codeMasterKey
       );
 
-      const publicOutputs = lastProof.publicOutput;
-      const deserializedClue = deserializeClueHistory(
-        publicOutputs.packedClueHistory
-      )[0];
-      const clue = deserializeClue(deserializedClue);
-
-      expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
-      expect(publicOutputs.codeBreakerId).toEqual(codeBreakerId);
-      expect(publicOutputs.solutionHash).toEqual(
-        lastProof.publicOutput.solutionHash
+      expect(lastClue.compress()).toEqual(
+        new Clue({
+          hits: Field.from(4),
+          blows: Field.from(0),
+        }).compress()
       );
-      expect(publicOutputs.lastGuess).toEqual(Field.from(7163));
-      expect(publicOutputs.serializedClue).toEqual(
-        serializeClue([2, 2, 2, 2].map(Field))
+
+      const publicOutputs = lastProof.publicOutput;
+      expect(publicOutputs.codeBreakerId).toEqual(codeBreakerId);
+      expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
+      expect(publicOutputs.solutionHash).toEqual(
+        Poseidon.hash([...secretCombination.digits, codeMasterSalt])
+      );
+      expect(publicOutputs.lastCompressedGuess).toEqual(lastGuess.compress());
+      expect(publicOutputs.lastcompressedClue).toEqual(lastClue.compress());
+      expect(publicOutputs.packedClueHistory).toEqual(
+        Clue.updateHistory(lastClue, Field.from(0), Field.from(0))
+      );
+      expect(publicOutputs.packedGuessHistory).toEqual(
+        lastProof.publicOutput.packedGuessHistory
       );
       expect(publicOutputs.turnCount.toBigInt()).toEqual(3n);
-      expect(clue).toEqual([2, 2, 2, 2].map(Field));
+      expect(
+        Clue.decompress(publicOutputs.lastcompressedClue).isSolved().toBoolean()
+      ).toEqual(true);
     });
 
     it('Should reject next guess: secret is already solved', async () => {
@@ -372,113 +389,87 @@ describe('Mastermind ZkProgram Tests', () => {
 
   describe('Another new game after second completion for Clue comparison', () => {
     it('Should create a new game successfully with new secret', async () => {
-      // Generate new secret combination for the codeMaster
-      unseparatedSecretCombination = Field.from(6384);
+      secretNumbers = [6, 3, 2, 4];
+      secretCombination = Combination.from(secretNumbers);
 
-      const stepProof = await StepProgram.createGame(
-        {
-          authPubKey: codeMasterPubKey,
-          authSignature: Signature.create(codeMasterKey, [
-            unseparatedSecretCombination,
-            codeMasterSalt,
-          ]),
-        },
-        unseparatedSecretCombination,
-        codeMasterSalt
+      lastProof = await StepProgramCreateGame(
+        secretNumbers,
+        codeMasterSalt,
+        codeMasterKey
       );
 
-      const publicOutputs = stepProof.proof.publicOutput;
-
+      const publicOutputs = lastProof.publicOutput;
       expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
-      expect(publicOutputs.codeBreakerId).toEqual(Field.empty());
+      expect(publicOutputs.codeBreakerId).toEqual(Field.from(0));
       expect(publicOutputs.solutionHash).toEqual(
-        Poseidon.hash([
-          ...separateCombinationDigits(unseparatedSecretCombination),
-          codeMasterSalt,
-        ])
+        Poseidon.hash([...secretCombination.digits, codeMasterSalt])
       );
-      expect(publicOutputs.lastGuess).toEqual(Field.empty());
-      expect(publicOutputs.serializedClue).toEqual(Field.empty());
+      expect(publicOutputs.lastCompressedGuess).toEqual(Field.from(0));
+      expect(publicOutputs.lastcompressedClue).toEqual(Field.from(0));
       expect(publicOutputs.turnCount.toBigInt()).toEqual(1n);
-
-      lastProof = stepProof.proof;
+      expect(publicOutputs.packedClueHistory).toEqual(Field.from(0));
+      expect(publicOutputs.packedGuessHistory).toEqual(Field.from(0));
     });
 
     it('Should make a correct number - wrong position guess', async () => {
-      const firstGuess = [8, 4, 6, 3];
-      const unseparatedGuess = compressCombinationDigits(firstGuess.map(Field));
+      lastGuessNumbers = [2, 4, 6, 3];
+      lastGuess = Combination.from(lastGuessNumbers);
 
-      const stepProof = await StepProgram.makeGuess(
-        {
-          authPubKey: codeBreakerPubKey,
-          authSignature: Signature.create(codeBreakerKey, [
-            unseparatedGuess,
-            Field.from(
-              lastProof ? lastProof.publicOutput.turnCount.toBigInt() : 1n
-            ),
-          ]),
-        },
+      lastProof = await StepProgramMakeGuess(
         lastProof,
-        unseparatedGuess
+        lastGuessNumbers,
+        codeBreakerKey
       );
 
-      const publicOutputs = stepProof.proof.publicOutput;
+      const publicOutputs = lastProof.publicOutput;
 
-      expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
       expect(publicOutputs.codeBreakerId).toEqual(codeBreakerId);
-      expect(publicOutputs.solutionHash).toEqual(
-        lastProof.publicOutput.solutionHash
+      expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
+      expect(publicOutputs.lastCompressedGuess).toEqual(lastGuess.compress());
+      expect(publicOutputs.lastcompressedClue).toEqual(Field.from(0));
+      expect(publicOutputs.packedClueHistory).toEqual(Field.from(0));
+      expect(publicOutputs.packedGuessHistory).toEqual(
+        Combination.updateHistory(lastGuess, Field.from(0), Field.from(0))
       );
-      expect(publicOutputs.lastGuess).toEqual(unseparatedGuess);
-      expect(publicOutputs.serializedClue).toEqual(Field.empty());
+      expect(publicOutputs.solutionHash).toEqual(
+        Poseidon.hash([...secretCombination.digits, codeMasterSalt])
+      );
       expect(publicOutputs.turnCount.toBigInt()).toEqual(2n);
-
-      lastProof = stepProof.proof;
     });
 
     it('Should give clue and report that the secret is not solved', async () => {
-      const unseparatedCombination = compressCombinationDigits(
-        [6, 3, 8, 4].map(Field)
+      lastClue = Clue.giveClue(lastGuess.digits, secretCombination.digits);
+      expect(lastClue.compress()).toEqual(
+        new Clue({
+          hits: Field.from(0),
+          blows: Field.from(4),
+        }).compress()
       );
-
-      const stepProof = await StepProgram.giveClue(
-        {
-          authPubKey: codeMasterPubKey,
-          authSignature: Signature.create(codeMasterKey, [
-            unseparatedCombination,
-            codeMasterSalt,
-            Field.from(
-              lastProof ? lastProof.publicOutput.turnCount.toBigInt() : 1n
-            ),
-          ]),
-        },
+      lastProof = await StepProgramGiveClue(
         lastProof,
-        unseparatedCombination,
-        codeMasterSalt
+        secretNumbers,
+        codeMasterSalt,
+        codeMasterKey
       );
 
-      const publicOutputs = stepProof.proof.publicOutput;
-
-      const deserializedClue = deserializeClueHistory(
-        publicOutputs.packedClueHistory
-      )[0];
-
-      const clue = deserializeClue(deserializedClue);
-
-      expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
+      const publicOutputs = lastProof.publicOutput;
       expect(publicOutputs.codeBreakerId).toEqual(codeBreakerId);
+      expect(publicOutputs.codeMasterId).toEqual(codeMasterId);
       expect(publicOutputs.solutionHash).toEqual(
-        lastProof.publicOutput.solutionHash
+        Poseidon.hash([...secretCombination.digits, codeMasterSalt])
       );
-      expect(publicOutputs.lastGuess).toEqual(Field.from(8463));
-      expect(publicOutputs.serializedClue).toEqual(
-        serializeClue([1, 1, 1, 1].map(Field))
+      expect(publicOutputs.lastCompressedGuess).toEqual(lastGuess.compress());
+      expect(publicOutputs.lastcompressedClue).toEqual(lastClue.compress());
+      expect(publicOutputs.packedClueHistory).toEqual(
+        Clue.updateHistory(lastClue, Field.from(0), Field.from(0))
+      );
+      expect(publicOutputs.packedGuessHistory).toEqual(
+        lastProof.publicOutput.packedGuessHistory
       );
       expect(publicOutputs.turnCount.toBigInt()).toEqual(3n);
-      expect(clue).toEqual([1, 1, 1, 1].map(Field));
-      expect(deserializedClue.toBigInt()).toEqual(85n); // it is stored as [01010101], which is 85.
-
-      lastProof = stepProof.proof;
+      expect(
+        Clue.decompress(publicOutputs.lastcompressedClue).isSolved().toBoolean()
+      ).toEqual(false);
     });
   });
 });
