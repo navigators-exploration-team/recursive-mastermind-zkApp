@@ -9,20 +9,7 @@ import {
   ZkProgram,
 } from 'o1js';
 
-import {
-  checkIfSolved,
-  serializeClue,
-  deserializeClue,
-  deserializeClueHistory,
-  deserializeCombinationHistory,
-  getClueFromGuess,
-  getElementAtIndex,
-  separateCombinationDigits,
-  serializeClueHistory,
-  serializeCombinationHistory,
-  updateElementAtIndex,
-  validateCombination,
-} from './utils.js';
+import { Combination, Clue } from './utils.js';
 
 export { StepProgram, PublicInputs, PublicOutputs, StepProgramProof };
 
@@ -46,8 +33,8 @@ class PublicOutputs extends Struct({
   codeMasterId: Field,
   codeBreakerId: Field,
   solutionHash: Field,
-  lastGuess: Field,
-  serializedClue: Field,
+  lastCompressedGuess: Field,
+  compressedClue: Field,
   turnCount: UInt8,
   packedGuessHistory: Field,
   packedClueHistory: Field,
@@ -62,39 +49,31 @@ const StepProgram = ZkProgram({
     /**
      * Creates a new game by setting the secret combination and salt. You can think of this as base case of the recursion.
      * @param authInputs contains the public key and signature of the code master to verify the authenticity of the caller.
-     * Signature message should be the concatenation of the `unseparatedSecretCombination` and `salt`.
-     * @param unseparatedSecretCombination secret combination to be solved by the codeBreaker.
+     * Signature message should be the concatenation of the `secretCombination` and `salt`.
+     * @param secretCombination secret combination to be solved by the codeBreaker.
      * @param salt the salt to be used in the hash function to prevent pre-image attacks.
      * @returns the proof of the new game and the public output.
      */
     createGame: {
-      privateInputs: [Field, Field],
+      privateInputs: [Combination, Field],
       async method(
         authInputs: PublicInputs,
-        unseparatedSecretCombination: Field,
+        secretCombination: Combination,
         salt: Field
       ) {
-        //! Separate combination digits and validate
-        const secretCombination = separateCombinationDigits(
-          unseparatedSecretCombination
-        );
+        secretCombination.validate();
 
-        validateCombination(secretCombination);
-        const solutionHash = Poseidon.hash([...secretCombination, salt]);
-
-        //! Verify the signature of code master
         authInputs.authSignature
-          .verify(authInputs.authPubKey, [unseparatedSecretCombination, salt])
+          .verify(authInputs.authPubKey, [...secretCombination.digits, salt])
           .assertTrue('Invalid signature!');
-        const codeMasterId = Poseidon.hash(authInputs.authPubKey.toFields());
 
         return {
           publicOutput: new PublicOutputs({
-            codeMasterId: codeMasterId,
-            codeBreakerId: Field.empty(),
-            solutionHash,
-            lastGuess: Field.empty(),
-            serializedClue: Field.empty(),
+            codeMasterId: Poseidon.hash(authInputs.authPubKey.toFields()),
+            codeBreakerId: Field.from(0),
+            solutionHash: Poseidon.hash([...secretCombination.digits, salt]),
+            lastCompressedGuess: Field.from(0),
+            compressedClue: Field.from(0),
             turnCount: UInt8.from(1),
             packedGuessHistory: Field.from(0),
             packedClueHistory: Field.from(0),
@@ -113,74 +92,54 @@ const StepProgram = ZkProgram({
      * The codeBreaker can only make a guess if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
      */
     makeGuess: {
-      privateInputs: [SelfProof, Field],
+      privateInputs: [SelfProof, Combination],
       async method(
         authInputs: PublicInputs,
         previousClue: SelfProof<PublicInputs, PublicOutputs>,
-        unseparatedGuess: Field
+        guessCombination: Combination
       ) {
         previousClue.verify();
 
-        const turnCount = previousClue.publicOutput.turnCount;
+        const turnCount = previousClue.publicOutput.turnCount.value;
+        turnCount
+          .isEven()
+          .assertFalse('Please wait for the codeMaster to give you a clue!');
 
-        //! Verify the signature of code breaker
         authInputs.authSignature
-          .verify(authInputs.authPubKey, [unseparatedGuess, turnCount.value])
+          .verify(authInputs.authPubKey, [
+            ...guessCombination.digits,
+            turnCount,
+          ])
           .assertTrue('You are not the codeBreaker of this game!');
 
-        const deserializedClue = deserializeClue(
-          previousClue.publicOutput.serializedClue
-        );
-        let isSolved = checkIfSolved(deserializedClue);
+        Clue.decompress(previousClue.publicOutput.compressedClue)
+          .isSolved()
+          .assertFalse('You have already solved the secret combination!');
 
-        //! Assert that the secret combination is not solved yet
-        isSolved.assertFalse('You have already solved the secret combination!');
-
-        //! Only allow codeBreaker to call this method following the correct turn sequence
-        const isCodebreakerTurn = turnCount.value.isEven().not();
-        isCodebreakerTurn.assertTrue(
-          'Please wait for the codeMaster to give you a clue!'
-        );
-
-        //? If first guess ==> set the codeBreaker ID
-        //? Else           ==> use the previous codeBreaker ID
-        const isFirstGuess = turnCount.value.equals(1);
         const computedCodebreakerId = Poseidon.hash(
           authInputs.authPubKey.toFields()
         );
 
-        //! Restrict method access solely to the correct codeBreaker
         previousClue.publicOutput.codeBreakerId
           .equals(computedCodebreakerId)
-          .or(isFirstGuess)
+          .or(turnCount.equals(1))
           .assertTrue('You are not the codeBreaker of this game!');
 
-        //! Separate and validate the guess combination
-        const guessDigits = separateCombinationDigits(unseparatedGuess);
-        validateCombination(guessDigits);
+        guessCombination.validate();
 
-        const serializedGuessHistory =
-          previousClue.publicOutput.packedGuessHistory;
-
-        const guessHistory = deserializeCombinationHistory(
-          serializedGuessHistory
+        const packedGuessHistory = Combination.updateHistory(
+          guessCombination,
+          previousClue.publicOutput.packedGuessHistory,
+          turnCount.sub(1).div(2)
         );
-        const updatedGuessHistory = updateElementAtIndex(
-          unseparatedGuess,
-          guessHistory,
-          turnCount.sub(1).div(2).value
-        );
-
-        const serializedUpdatedGuessHistory =
-          serializeCombinationHistory(updatedGuessHistory);
 
         return {
           publicOutput: new PublicOutputs({
             ...previousClue.publicOutput,
             codeBreakerId: computedCodebreakerId,
-            lastGuess: unseparatedGuess,
-            turnCount: turnCount.add(1),
-            packedGuessHistory: serializedUpdatedGuessHistory,
+            lastCompressedGuess: guessCombination.compress(),
+            turnCount: previousClue.publicOutput.turnCount.add(1),
+            packedGuessHistory,
           }),
         };
       },
@@ -197,100 +156,67 @@ const StepProgram = ZkProgram({
      * The codeMaster can only give a clue if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
      */
     giveClue: {
-      privateInputs: [SelfProof, Field, Field],
+      privateInputs: [SelfProof, Combination, Field],
       async method(
         authInputs: PublicInputs,
         previousGuess: SelfProof<PublicInputs, PublicOutputs>,
-        unseparatedSecretCombination: Field,
+        secretCombination: Combination,
         salt: Field
       ) {
         previousGuess.verify();
 
-        const turnCount = previousGuess.publicOutput.turnCount;
+        const turnCount = previousGuess.publicOutput.turnCount.value;
+        turnCount
+          .isEven()
+          .and(turnCount.equals(0).not())
+          .assertTrue('Please wait for the codeBreaker to make a guess!');
 
-        //! Verify the signature of code master
         authInputs.authSignature
           .verify(authInputs.authPubKey, [
-            unseparatedSecretCombination,
+            ...secretCombination.digits,
             salt,
-            turnCount.value,
+            turnCount,
           ])
           .assertTrue(
             'Only the codeMaster of this game is allowed to give clue!'
           );
 
-        // Generate codeMaster ID
         const computedCodemasterId = Poseidon.hash(
           authInputs.authPubKey.toFields()
         );
 
-        //! Restrict method access solely to the correct codeMaster
         previousGuess.publicOutput.codeMasterId.assertEquals(
           computedCodemasterId,
           'Only the codeMaster of this game is allowed to give clue!'
         );
 
-        //! Assert that the turnCount is pair & not zero for the codeMaster to call this method
-        const isNotFirstTurn = turnCount.value.equals(0).not();
-        const isCodemasterTurn = turnCount.value.isEven().and(isNotFirstTurn);
-        isCodemasterTurn.assertTrue(
-          'Please wait for the codeBreaker to make a guess!'
-        );
-
-        // Separate the secret combination digits
-        const solution = separateCombinationDigits(
-          unseparatedSecretCombination
-        );
-
-        //! Compute solution hash and assert integrity to state on-chain
-        const computedSolutionHash = Poseidon.hash([...solution, salt]);
+        const computedSolutionHash = Poseidon.hash([
+          ...secretCombination.digits,
+          salt,
+        ]);
         previousGuess.publicOutput.solutionHash.assertEquals(
           computedSolutionHash,
           'The secret combination is not compliant with the initial hash from game creation!'
         );
 
-        // get & separate the latest guess
-        const unseparatedGuess = previousGuess.publicOutput.lastGuess;
-
-        const serializedGuessHistory =
-          previousGuess.publicOutput.packedGuessHistory;
-        const guessHistory = deserializeCombinationHistory(
-          serializedGuessHistory
+        const lastGuess = Combination.decompress(
+          previousGuess.publicOutput.lastCompressedGuess
         );
 
-        const guessIndex = turnCount.div(2).sub(1);
-        const latestGuess = getElementAtIndex(guessHistory, guessIndex.value);
+        let clue = Clue.giveClue(lastGuess.digits, secretCombination.digits);
 
-        latestGuess.assertEquals(
-          previousGuess.publicOutput.lastGuess,
-          'Latest guesss in history does not match with last guess in proof!'
+        const packedClueHistory = Clue.updateHistory(
+          clue,
+          previousGuess.publicOutput.packedClueHistory,
+          turnCount.div(2).sub(1)
         );
-
-        const guessDigits = separateCombinationDigits(unseparatedGuess);
-
-        // Scan the guess through the solution and return clue result(hit or blow)
-        let clue = getClueFromGuess(guessDigits, solution);
-
-        // Serialize & give the clue
-        const serializedClue = serializeClue(clue);
-        const serializedClueHistory =
-          previousGuess.publicOutput.packedClueHistory;
-        const clueHistory = deserializeClueHistory(serializedClueHistory);
-        const updatedClueHistory = updateElementAtIndex(
-          serializedClue,
-          clueHistory,
-          guessIndex.value
-        );
-
-        const serializedUpdatedClueHistory =
-          serializeClueHistory(updatedClueHistory);
 
         return {
           publicOutput: new PublicOutputs({
             ...previousGuess.publicOutput,
-            serializedClue,
-            turnCount: turnCount.add(1),
-            packedClueHistory: serializedUpdatedClueHistory,
+            compressedClue: clue.compress(),
+            turnCount: previousGuess.publicOutput.turnCount.add(1),
+            packedClueHistory,
           }),
         };
       },
