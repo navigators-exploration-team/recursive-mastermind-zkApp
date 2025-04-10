@@ -1,6 +1,6 @@
 import { Field, PrivateKey, Signature } from 'o1js';
-import { compressCombinationDigits } from '../utils';
 import { StepProgram, StepProgramProof } from '../stepProgram';
+import { Combination } from '../utils';
 
 export {
   StepProgramCreateGame,
@@ -19,14 +19,17 @@ const StepProgramCreateGame = async (
   salt: Field,
   codeMasterKey: PrivateKey
 ): Promise<StepProgramProof> => {
-  const unseparatedSecret = compressCombinationDigits(secret.map(Field));
+  const secretCombination = Combination.from(secret);
 
   const { proof } = await StepProgram.createGame(
     {
       authPubKey: codeMasterKey.toPublicKey(),
-      authSignature: Signature.create(codeMasterKey, [unseparatedSecret, salt]),
+      authSignature: Signature.create(codeMasterKey, [
+        ...secretCombination.digits,
+        salt,
+      ]),
     },
-    unseparatedSecret,
+    secretCombination,
     salt
   );
   return proof;
@@ -40,17 +43,17 @@ const StepProgramMakeGuess = async (
   guess: number[],
   codeBreakerKey: PrivateKey
 ): Promise<StepProgramProof> => {
-  const unseparatedGuess = compressCombinationDigits(guess.map(Field));
+  const guessCombination = Combination.from(guess);
   const { proof } = await StepProgram.makeGuess(
     {
       authPubKey: codeBreakerKey.toPublicKey(),
       authSignature: Signature.create(codeBreakerKey, [
-        unseparatedGuess,
+        ...guessCombination.digits,
         Field.from(prevProof.publicOutput.turnCount.toBigInt()),
       ]),
     },
     prevProof,
-    unseparatedGuess
+    guessCombination
   );
   return proof;
 };
@@ -64,20 +67,18 @@ const StepProgramGiveClue = async (
   salt: Field,
   codeMasterKey: PrivateKey
 ): Promise<StepProgramProof> => {
-  const unseparatedCombination = compressCombinationDigits(
-    combination.map(Field)
-  );
+  const secretCombination = Combination.from(combination);
   const { proof } = await StepProgram.giveClue(
     {
       authPubKey: codeMasterKey.toPublicKey(),
       authSignature: Signature.create(codeMasterKey, [
-        unseparatedCombination,
+        ...secretCombination.digits,
         salt,
         Field.from(prevProof.publicOutput.turnCount.toBigInt()),
       ]),
     },
     prevProof,
-    unseparatedCombination,
+    secretCombination,
     salt
   );
   return proof;
