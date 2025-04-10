@@ -18,10 +18,9 @@ import {
 
 import { Combination, Clue, GameState } from './utils.js';
 import { StepProgramProof } from './stepProgram.js';
+import { MAX_ATTEMPTS, PER_ATTEMPT_GAME_DURATION } from './constants.js';
 
 export {
-  PER_ATTEMPT_GAME_DURATION,
-  MAX_ATTEMPTS,
   NewGameEvent,
   GameAcceptEvent,
   RewardClaimEvent,
@@ -29,9 +28,6 @@ export {
   ProofSubmissionEvent,
   MastermindZkApp,
 };
-
-const PER_ATTEMPT_GAME_DURATION = 2; // 2 slots (6 minute) per attempt
-const MAX_ATTEMPTS = 7;
 
 class NewGameEvent extends Struct({
   rewardAmount: UInt64,

@@ -1,7 +1,6 @@
+import { PER_ATTEMPT_GAME_DURATION, MAX_ATTEMPTS } from './constants.js';
 import {
   MastermindZkApp,
-  PER_ATTEMPT_GAME_DURATION,
-  MAX_ATTEMPTS,
   NewGameEvent,
   GameAcceptEvent,
   RewardClaimEvent,
