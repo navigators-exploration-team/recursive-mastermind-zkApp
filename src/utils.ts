@@ -37,13 +37,15 @@ class Combination extends Struct({
   }
 
   validate() {
-    for (let i = 1; i < 4; i++) {
+    for (let i = 0; i < 4; i++) {
       this.digits[i]
         .equals(0)
         .or(this.digits[i].equals(8))
         .or(this.digits[i].equals(9))
         .assertFalse(`Combination digit ${i + 1} is not in range [1, 7]!`);
+    }
 
+    for (let i = 1; i < 4; i++) {
       for (let j = i; j < 4; j++) {
         this.digits[i - 1].assertNotEquals(
           this.digits[j],
