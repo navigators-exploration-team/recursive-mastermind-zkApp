@@ -1,5 +1,5 @@
 import { Field, Bool, Provable, UInt64, UInt32, Struct, UInt8 } from 'o1js';
-import { MAX_ATTEMPTS } from './constants';
+import { MAX_ATTEMPTS } from './constants.js';
 
 export { Combination, Clue, GameState };
 
