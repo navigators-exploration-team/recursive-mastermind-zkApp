@@ -43,8 +43,7 @@ class Combination extends Struct({
     for (let i = 0; i < 4; i++) {
       this.digits[i]
         .equals(0)
-        .or(this.digits[i].equals(8)) // do we need check for after 3 bits?
-        .or(this.digits[i].equals(9))
+        .or(this.digits[i].greaterThan(7))
         .assertFalse(`Combination digit ${i + 1} is not in range [1, 7]!`);
     }
 
