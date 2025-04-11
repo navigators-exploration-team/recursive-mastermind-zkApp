@@ -94,7 +94,7 @@ describe('Mastermind ZkProgram Tests', () => {
 
     it('Should reject codeMaster with invalid secret combination: third digit is not unique', async () => {
       const expectedErrorMessage = 'Combination digit 3 is not unique!';
-      await expectCreateGameToFail([2, 3, 2, 9], expectedErrorMessage);
+      await expectCreateGameToFail([2, 3, 2, 6], expectedErrorMessage);
     });
 
     it('Should create a game successfully', async () => {
@@ -128,7 +128,7 @@ describe('Mastermind ZkProgram Tests', () => {
 
     it('Should reject codeBreaker with invalid guess combination: second digit is not unique', async () => {
       const expectedErrorMessage = 'Combination digit 2 is not unique!';
-      await expectGuessToFail([1, 1, 2, 9], expectedErrorMessage);
+      await expectGuessToFail([1, 1, 2, 6], expectedErrorMessage);
     });
 
     it('Should reject giveClue in the wrong turn', async () => {
@@ -284,7 +284,7 @@ describe('Mastermind ZkProgram Tests', () => {
     it('Should reject the codebraker from calling this method out of sequence', async () => {
       const expectedErrorMessage =
         'Please wait for the codeMaster to give you a clue!';
-      await expectGuessToFail([1, 2, 4, 8], expectedErrorMessage);
+      await expectGuessToFail([1, 2, 4, 6], expectedErrorMessage);
     });
   });
 
@@ -383,7 +383,7 @@ describe('Mastermind ZkProgram Tests', () => {
     it('should reject next clue: secret is already solved', async () => {
       const expectedErrorMessage =
         'Please wait for the codeBreaker to make a guess!';
-      await expectGiveClueToFail([2, 2, 2, 2], expectedErrorMessage);
+      await expectGiveClueToFail([1, 2, 3, 4], expectedErrorMessage);
     });
   });
 
