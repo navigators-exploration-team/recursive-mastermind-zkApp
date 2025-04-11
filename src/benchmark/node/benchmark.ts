@@ -9,12 +9,11 @@ import {
   PublicKey,
   Lightnet,
   fetchAccount,
-  UInt8,
 } from 'o1js';
 
 import { StepProgram, StepProgramProof } from '../../stepProgram.js';
 import { performance } from 'perf_hooks';
-import { checkIfSolved, deserializeClue } from '../../utils.js';
+import { Clue, Combination } from '../../utils.js';
 import { players } from '../../test/mock.js';
 
 const logsEnabled = process.env.LOGS_ENABLED === '1';
@@ -71,9 +70,8 @@ async function deployAndInitializeGame(
   zkappPrivateKey: PrivateKey,
   codeMasterKey: PrivateKey,
   codeMasterSalt: Field,
-  unseparatedSecretCombination: Field,
-  refereeKey: PrivateKey,
-  maxAttempt: UInt8
+  secretCombination: Combination,
+  refereeKey: PrivateKey
 ) {
   const deployerAccount = codeMasterKey.toPublicKey();
   const refereeAccount = refereeKey.toPublicKey();
@@ -87,9 +85,8 @@ async function deployAndInitializeGame(
       AccountUpdate.fundNewAccount(deployerAccount);
       zkapp.deploy();
       await zkapp.initGame(
-        unseparatedSecretCombination,
+        secretCombination,
         codeMasterSalt,
-        maxAttempt,
         refereeAccount,
         UInt64.from(10000)
       );
@@ -268,34 +265,26 @@ async function main() {
   console.log('--------------------------------------');
 
   const steps = [
-    Field.from(9312),
-    Field.from(3456),
-    Field.from(7891),
-    Field.from(2345),
-    Field.from(6789),
-    Field.from(5432),
-    Field.from(9786),
-    Field.from(8461),
-    Field.from(6532),
-    Field.from(5316),
-    Field.from(7451),
-    Field.from(9123),
-    Field.from(4567),
-    Field.from(8951),
-    Field.from(1234),
+    Combination.from([6, 3, 2, 1]),
+    Combination.from([3, 4, 5, 6]),
+    Combination.from([7, 4, 1, 6]),
+    Combination.from([2, 3, 4, 5]),
+    Combination.from([6, 7, 1, 2]),
+    Combination.from([5, 4, 3, 2]),
+    Combination.from([1, 2, 3, 4]),
   ];
 
   // Step Length 3
-  await solveBenchmark(1234, steps.slice(12));
-  await solveBenchmark(4321, steps.slice(12));
+  await solveBenchmark([1, 2, 3, 4], steps.slice(12));
+  await solveBenchmark([4, 3, 2, 1], steps.slice(12));
 
   // Step Length 4
-  await solveBenchmark(1234, steps.slice(11));
-  await solveBenchmark(4321, steps.slice(11));
+  await solveBenchmark([1, 2, 3, 4], steps.slice(11));
+  await solveBenchmark([4, 3, 2, 1], steps.slice(11));
 
   // Step Length 5
-  await solveBenchmark(1234, steps.slice(10));
-  await solveBenchmark(4321, steps.slice(10));
+  await solveBenchmark([1, 2, 3, 4], steps.slice(10));
+  await solveBenchmark([4, 3, 2, 1], steps.slice(10));
 
   console.log('Overall Benchmark Results for Solved Games');
   overallScores(benchmarkResults.filter((result) => result.isSolved));
@@ -303,7 +292,7 @@ async function main() {
   overallScores(benchmarkResults.filter((result) => !result.isSolved));
 }
 
-async function solveBenchmark(secret: number, steps: Field[]) {
+async function solveBenchmark(secret: number[], steps: Combination[]) {
   let proofsEnabled = false;
   let MINA_NODE_ENDPOINT: string = '';
   let MINA_ARCHIVE_ENDPOINT: string = '';
@@ -335,7 +324,7 @@ async function solveBenchmark(secret: number, steps: Field[]) {
 
   // Local Mina blockchain
   let Local: Awaited<ReturnType<typeof Mina.LocalBlockchain>>;
-  let unseparatedSecretCombination = Field.from(secret);
+  let secretCombination = Combination.from(secret);
   let lastProof: StepProgramProof;
 
   zkappPrivateKey = PrivateKey.random();
@@ -429,9 +418,8 @@ async function solveBenchmark(secret: number, steps: Field[]) {
     zkappPrivateKey,
     codeMasterKey,
     codeMasterSalt,
-    unseparatedSecretCombination,
-    refereeKey,
-    UInt8.from(5)
+    secretCombination,
+    refereeKey
   );
   let end = performance.now();
 
@@ -448,11 +436,11 @@ async function solveBenchmark(secret: number, steps: Field[]) {
       {
         authPubKey: codeMasterPubKey,
         authSignature: Signature.create(codeMasterKey, [
-          unseparatedSecretCombination,
+          ...secretCombination.digits,
           codeMasterSalt,
         ]),
       },
-      unseparatedSecretCombination,
+      secretCombination,
       codeMasterSalt
     )
   ).proof;
@@ -467,7 +455,7 @@ async function solveBenchmark(secret: number, steps: Field[]) {
         {
           authPubKey: codeBreakerPubKey,
           authSignature: Signature.create(codeBreakerKey, [
-            step,
+            ...step.digits,
             lastProof.publicOutput.turnCount.value,
           ]),
         },
@@ -484,13 +472,13 @@ async function solveBenchmark(secret: number, steps: Field[]) {
         {
           authPubKey: codeMasterPubKey,
           authSignature: Signature.create(codeMasterKey, [
-            unseparatedSecretCombination,
+            ...secretCombination.digits,
             codeMasterSalt,
             lastProof.publicOutput.turnCount.value,
           ]),
         },
         lastProof,
-        unseparatedSecretCombination,
+        secretCombination,
         codeMasterSalt
       )
     ).proof;
@@ -513,10 +501,9 @@ async function solveBenchmark(secret: number, steps: Field[]) {
   );
   end = performance.now();
 
-  const deserializedClue = deserializeClue(
-    lastProof.publicOutput.serializedClue
-  );
-  let isSolved = checkIfSolved(deserializedClue);
+  const isSolved = Clue.decompress(
+    lastProof.publicOutput.lastcompressedClue
+  ).isSolved();
 
   currentBenchmarkResults.isSolved = isSolved.toBoolean();
 

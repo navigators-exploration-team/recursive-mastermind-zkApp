@@ -1,6 +1,6 @@
+import { PER_ATTEMPT_GAME_DURATION, MAX_ATTEMPTS } from './constants.js';
 import {
   MastermindZkApp,
-  PER_ATTEMPT_GAME_DURATION,
   NewGameEvent,
   GameAcceptEvent,
   RewardClaimEvent,
@@ -13,26 +13,12 @@ import {
   PublicInputs,
   PublicOutputs,
 } from './stepProgram.js';
-import {
-  separateCombinationDigits,
-  compressCombinationDigits,
-  validateCombination,
-  serializeClue,
-  deserializeClue,
-  serializeClueHistory,
-  deserializeClueHistory,
-  getClueFromGuess,
-  checkIfSolved,
-  serializeCombinationHistory,
-  deserializeCombinationHistory,
-  updateElementAtIndex,
-  getElementAtIndex,
-  GameState,
-} from './utils.js';
+import { Combination, Clue, GameState } from './utils.js';
 
 export {
   MastermindZkApp,
   PER_ATTEMPT_GAME_DURATION,
+  MAX_ATTEMPTS,
   NewGameEvent,
   GameAcceptEvent,
   RewardClaimEvent,
@@ -42,18 +28,7 @@ export {
   PublicInputs,
   PublicOutputs,
   StepProgramProof,
-  separateCombinationDigits,
-  compressCombinationDigits,
-  validateCombination,
-  serializeClue,
-  deserializeClue,
-  serializeClueHistory,
-  deserializeClueHistory,
-  getClueFromGuess,
-  checkIfSolved,
-  serializeCombinationHistory,
-  deserializeCombinationHistory,
-  updateElementAtIndex,
-  getElementAtIndex,
+  Combination,
+  Clue,
   GameState,
 };

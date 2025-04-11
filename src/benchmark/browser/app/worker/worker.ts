@@ -9,16 +9,11 @@ import {
   Signature,
   fetchAccount,
   Lightnet,
-  UInt8,
 } from 'o1js';
 import { StepProgram } from '../../../../../build/src/stepProgram';
 import { MastermindZkApp } from '../../../../../build/src/Mastermind';
 
-import {
-  checkIfSolved,
-  compressCombinationDigits,
-  deserializeClue,
-} from '../../../../../build/src/utils';
+import { Clue, Combination } from '../../../../../build/src/utils';
 import { players } from './mock';
 
 const state = {
@@ -35,8 +30,8 @@ const state = {
   zkappPrivateKey: null as PrivateKey | null,
   zkappAddress: null as PublicKey | null,
   zkapp: null as InstanceType<typeof MastermindZkApp> | null,
-  secretCombination: null as number[] | null,
-  unseparatedSecretCombination: null as Field | null,
+  secretNumbers: null as number[] | null,
+  secretCombination: null as Combination | null,
   benchmarkResults: null as BenchmarkResults | null,
 };
 export type State = typeof state;
@@ -54,11 +49,7 @@ function log(...args: any[]) {
 }
 
 const functions = {
-  setActiveInstance: async ({
-    secretCombination,
-  }: {
-    secretCombination: number[];
-  }) => {
+  setActiveInstance: async ({ secretNumbers }: { secretNumbers: number[] }) => {
     let proofsEnabled = false;
     let MINA_NODE_ENDPOINT: string = '';
     let MINA_ARCHIVE_ENDPOINT: string = '';
@@ -77,10 +68,8 @@ const functions = {
     state.zkappAddress = state.zkappPrivateKey.toPublicKey();
     state.zkapp = new MastermindZkApp(state.zkappAddress);
     state.codeMasterSalt = Field.random();
-    state.secretCombination = secretCombination;
-    state.unseparatedSecretCombination = compressCombinationDigits(
-      state.secretCombination.map(Field)
-    );
+    state.secretNumbers = secretNumbers;
+    state.secretCombination = Combination.from(state.secretNumbers);
 
     // @ts-ignore
     if (testEnvironment === 'local') {
@@ -163,7 +152,7 @@ const functions = {
     if (!state.refereeKey) {
       throw new Error('Referee Key not initialized');
     }
-    if (!state.unseparatedSecretCombination) {
+    if (!state.secretCombination) {
       throw new Error('Secret Combination not initialized');
     }
     if (!state.codeMasterSalt) {
@@ -244,9 +233,8 @@ const functions = {
         AccountUpdate.fundNewAccount(deployerAccount);
         state.zkapp!.deploy();
         await state.zkapp!.initGame(
-          state.unseparatedSecretCombination!,
+          state.secretCombination!,
           state.codeMasterSalt!,
-          UInt8.from(5),
           state.refereeKey!.toPublicKey(),
           UInt64.from(10000)
         );
@@ -278,14 +266,14 @@ const functions = {
   },
 
   solveBenchmark: async ({
-    secretCombination,
+    secretNumbers,
     steps,
   }: {
-    secretCombination: number[];
-    steps: number[];
+    secretNumbers: number[];
+    steps: Combination[];
   }) => {
     console.log('Initiating Local Mina');
-    await functions.setActiveInstance({ secretCombination });
+    await functions.setActiveInstance({ secretNumbers });
     if (!state.benchmarkResults) {
       throw new Error('Benchmark results not initialized');
     }
@@ -309,11 +297,11 @@ const functions = {
       {
         authPubKey: state.codeMasterPubKey!,
         authSignature: Signature.create(state.codeMasterKey!, [
-          state.unseparatedSecretCombination!,
+          ...state.secretCombination!.digits,
           state.codeMasterSalt!,
         ]),
       },
-      state.unseparatedSecretCombination!,
+      state.secretCombination!,
       state.codeMasterSalt!
     );
     end = performance.now();
@@ -327,12 +315,12 @@ const functions = {
           {
             authPubKey: state.codeBreakerPubKey!,
             authSignature: Signature.create(state.codeBreakerKey!, [
-              Field.from(step),
+              ...step.digits,
               proof.publicOutput.turnCount.value,
             ]),
           },
           proof,
-          Field.from(step)
+          step
         )
       ).proof;
       end = performance.now();
@@ -345,13 +333,13 @@ const functions = {
           {
             authPubKey: state.codeMasterPubKey!,
             authSignature: Signature.create(state.codeMasterKey!, [
-              state.unseparatedSecretCombination!,
+              ...state.secretCombination!.digits,
               state.codeMasterSalt!,
               proof.publicOutput.turnCount.value,
             ]),
           },
           proof,
-          state.unseparatedSecretCombination!,
+          state.secretCombination!,
           state.codeMasterSalt!
         )
       ).proof;
@@ -381,8 +369,9 @@ const functions = {
     end = performance.now();
     state.benchmarkResults.submitGameProofSeconds = (end - start) / 1000;
 
-    const deserializedClue = deserializeClue(proof.publicOutput.serializedClue);
-    const isSolved = checkIfSolved(deserializedClue);
+    const isSolved = Clue.decompress(
+      proof.publicOutput.lastcompressedClue
+    ).isSolved();
 
     state.benchmarkResults.isSolved = isSolved.toBoolean();
 
