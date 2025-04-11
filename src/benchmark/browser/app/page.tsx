@@ -1,6 +1,7 @@
 'use client';
 import { useEffect } from 'react';
 import WorkerClient from './worker/workerClient';
+import { Combination } from '../../../../build/src/utils';
 
 export default function Home() {
   useEffect(() => {
@@ -130,9 +131,14 @@ export default function Home() {
         `Loading and compiling contract took ${(end - start) / 1000} seconds`
       );
 
-      const steps: number[] = [
-        9312, 3456, 7891, 2345, 6789, 5432, 9786, 8461, 6532, 5316, 7451, 9123,
-        4567, 8951, 1234,
+      const steps = [
+        Combination.from([6, 3, 2, 1]),
+        Combination.from([3, 4, 5, 6]),
+        Combination.from([7, 4, 1, 6]),
+        Combination.from([2, 3, 4, 5]),
+        Combination.from([6, 7, 1, 2]),
+        Combination.from([5, 4, 3, 2]),
+        Combination.from([1, 2, 3, 4]),
       ];
 
       const benchmarkResults: BenchmarkResults[] = [];
