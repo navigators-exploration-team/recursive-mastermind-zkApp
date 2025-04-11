@@ -10,9 +10,12 @@ class Combination extends Struct({
     if (numbers.length !== 4) {
       throw new Error('Combination must have exactly 4 digits');
     }
-    return new this({
+    const combination = new this({
       digits: numbers.map((number) => Field(number)),
     });
+
+    combination.validate();
+    return combination;
   }
 
   toBits() {
@@ -40,7 +43,7 @@ class Combination extends Struct({
     for (let i = 0; i < 4; i++) {
       this.digits[i]
         .equals(0)
-        .or(this.digits[i].equals(8))
+        .or(this.digits[i].equals(8)) // do we need check for after 3 bits?
         .or(this.digits[i].equals(9))
         .assertFalse(`Combination digit ${i + 1} is not in range [1, 7]!`);
     }
