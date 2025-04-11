@@ -18,6 +18,8 @@ import { GameState, Clue, Combination } from '../utils';
 import { StepProgram, StepProgramProof } from '../stepProgram';
 
 import {
+  gameGuesses,
+  generateTestProofs,
   StepProgramCreateGame,
   StepProgramGiveClue,
   StepProgramMakeGuess,
@@ -1174,287 +1176,284 @@ describe('Mastermind ZkApp Tests', () => {
       });
     }
   });
-  // describe('StepProgramProof settlements tests', () => {
-  //   beforeAll(async () => {
-  //     secretCombination = [1, 2, 3, 4];
-  //   });
-
-  //   beforeEach(async () => {
-  //     await prepareNewGame();
-  //   });
-
-  //   it('Should generate a proof with randomly chosen actions for codeMaster victory and settle.', async () => {
-  //     const rounds = 15;
-  //     const winnerFlag = 'codemaster-victory';
-
-  //     const expectedMsg = 'You are not the winner of this game!';
-
-  //     const CMVictoryProof = await generateTestProofs(
-  //       winnerFlag,
-  //       rounds,
-  //       codeMasterSalt,
-  //       secretCombination,
-  //       codeBreakerKey,
-  //       codeMasterKey
-  //     );
-
-  //     const publicOutputs = CMVictoryProof.publicOutput;
-
-  //     await submitGameProof(CMVictoryProof, codeMasterPubKey, true);
+  describe('StepProgramProof settlements tests', () => {
+    beforeAll(async () => {
+      secretCombination = [1, 2, 3, 4];
+    });
+
+    beforeEach(async () => {
+      await prepareNewGame();
+    });
+
+    it('Should generate a proof with randomly chosen actions for codeMaster victory and settle.', async () => {
+      const rounds = 7;
+      const winnerFlag = 'codemaster-victory';
+
+      const expectedMsg = 'You are not the winner of this game!';
+
+      const CMVictoryProof = await generateTestProofs(
+        winnerFlag,
+        rounds,
+        codeMasterSalt,
+        secretCombination,
+        codeBreakerKey,
+        codeMasterKey
+      );
+
+      const publicOutputs = CMVictoryProof.publicOutput;
+
+      await submitGameProof(CMVictoryProof, codeMasterPubKey, true);
+
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
+
+      expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
+      expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
+      expect(isSolved.toBoolean()).toEqual(false);
+      expect(zkapp.codeBreakerId.get()).toEqual(
+        Poseidon.hash(codeBreakerPubKey.toFields())
+      );
+
+      await expectClaimRewardToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        expectedMsg
+      );
+    });
+
+    it('Should generate a proof with predefined actions for codeMaster victory and settle.', async () => {
+      const rounds = 7;
+      const winnerFlag = 'codemaster-victory';
+
+      const expectedMsg = 'You are not the winner of this game!';
+
+      const CMVictoryProof = await generateTestProofs(
+        winnerFlag,
+        rounds,
+        codeMasterSalt,
+        secretCombination,
+        codeBreakerKey,
+        codeMasterKey,
+        gameGuesses
+      );
+
+      const publicOutputs = CMVictoryProof.publicOutput;
+
+      await submitGameProof(CMVictoryProof, codeMasterPubKey, true);
+
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
+
+      const attemptList = gameGuesses.totalAttempts.slice(0, rounds);
+      const separatedHistory = Array.from({ length: rounds }, (_, i) =>
+        Combination.getElementFromHistory(
+          zkapp.packedGuessHistory.get(),
+          Field(i)
+        ).digits.map(Number)
+      );
 
-  //     const { turnCount, isSolved } = GameState.unpack(
-  //       zkapp.compressedState.get()
-  //     );
+      expect(separatedHistory).toEqual(attemptList);
+      expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
 
-  //     expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
-  //     expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
-  //     expect(isSolved.toBoolean()).toEqual(false);
-  //     expect(zkapp.codeBreakerId.get()).toEqual(
-  //       Poseidon.hash(codeBreakerPubKey.toFields())
-  //     );
-
-  //     await expectClaimRewardToFail(
-  //       codeBreakerPubKey,
-  //       codeBreakerKey,
-  //       expectedMsg
-  //     );
-  //   });
-
-  //   it('Should generate a proof with predefined actions for codeMaster victory and settle.', async () => {
-  //     const rounds = 15;
-  //     const winnerFlag = 'codemaster-victory';
-
-  //     const expectedMsg = 'You are not the winner of this game!';
-
-  //     const CMVictoryProof = await generateTestProofs(
-  //       winnerFlag,
-  //       rounds,
-  //       codeMasterSalt,
-  //       secretCombination,
-  //       codeBreakerKey,
-  //       codeMasterKey,
-  //       gameGuesses
-  //     );
-
-  //     const publicOutputs = CMVictoryProof.publicOutput;
+      expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
 
-  //     await submitGameProof(CMVictoryProof, codeMasterPubKey, true);
-
-  //     const { turnCount, isSolved } = GameState.unpack(
-  //       zkapp.compressedState.get()
-  //     );
-
-  //     const attemptList = gameGuesses.totalAttempts.slice(0, rounds);
-  //     const expectedGuessHistory = deserializeCombinationHistory(
-  //       zkapp.packedGuessHistory.get()
-  //     );
+      expect(isSolved.toBoolean()).toEqual(false);
 
-  //     const separatedHistory = Array.from({ length: rounds }, (_, i) =>
-  //       separateCombinationDigits(expectedGuessHistory[i]).map(Number)
-  //     );
+      expect(zkapp.codeBreakerId.get()).toEqual(
+        Poseidon.hash(codeBreakerPubKey.toFields())
+      );
 
-  //     expect(separatedHistory).toEqual(attemptList);
-  //     expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
+      await expectClaimRewardToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        expectedMsg
+      );
+    });
+
+    it('Should generate a proof with randomly chosen actions for codeBreaker victory and settle.', async () => {
+      const rounds = 3;
+      const winnerFlag = 'codebreaker-victory';
+
+      const expectedMsg = 'You are not the winner of this game!';
+
+      const CBVictoryProof = await generateTestProofs(
+        winnerFlag,
+        rounds,
+        codeMasterSalt,
+        secretCombination,
+        codeBreakerKey,
+        codeMasterKey
+      );
 
-  //     expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
+      await submitGameProof(CBVictoryProof, codeBreakerPubKey, true);
 
-  //     expect(isSolved.toBoolean()).toEqual(false);
+      const publicOutputs = CBVictoryProof.publicOutput;
 
-  //     expect(zkapp.codeBreakerId.get()).toEqual(
-  //       Poseidon.hash(codeBreakerPubKey.toFields())
-  //     );
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
 
-  //     await expectClaimRewardToFail(
-  //       codeBreakerPubKey,
-  //       codeBreakerKey,
-  //       expectedMsg
-  //     );
-  //   });
+      expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
 
-  //   it('Should generate a proof with randomly chosen actions for codeBreaker victory and settle.', async () => {
-  //     const rounds = 3;
-  //     const winnerFlag = 'codebreaker-victory';
-
-  //     const expectedMsg = 'You are not the winner of this game!';
-
-  //     const CBVictoryProof = await generateTestProofs(
-  //       winnerFlag,
-  //       rounds,
-  //       codeMasterSalt,
-  //       secretCombination,
-  //       codeBreakerKey,
-  //       codeMasterKey
-  //     );
-
-  //     await submitGameProof(CBVictoryProof, codeBreakerPubKey, true);
-
-  //     const publicOutputs = CBVictoryProof.publicOutput;
-
-  //     const { turnCount, isSolved } = GameState.unpack(
-  //       zkapp.compressedState.get()
-  //     );
-
-  //     expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
-
-  //     expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
-
-  //     expect(isSolved.toBoolean()).toEqual(true);
-
-  //     expect(zkapp.codeBreakerId.get()).toEqual(
-  //       Poseidon.hash(codeBreakerPubKey.toFields())
-  //     );
-
-  //     await expectClaimRewardToFail(
-  //       codeMasterPubKey,
-  //       codeMasterKey,
-  //       expectedMsg
-  //     );
-  //   });
-
-  //   it('Should generate a proof with predefined actions for codeBreaker victory and settle.', async () => {
-  //     const rounds = 3;
-  //     const winnerFlag = 'codebreaker-victory';
-
-  //     const expectedMsg = 'You are not the winner of this game!';
-
-  //     const CBVictoryProof = await generateTestProofs(
-  //       winnerFlag,
-  //       rounds,
-  //       codeMasterSalt,
-  //       secretCombination,
-  //       codeBreakerKey,
-  //       codeMasterKey,
-  //       gameGuesses
-  //     );
-
-  //     await submitGameProof(CBVictoryProof, codeBreakerPubKey, true);
-
-  //     const publicOutputs = CBVictoryProof.publicOutput;
-
-  //     const { turnCount, isSolved } = GameState.unpack(
-  //       zkapp.compressedState.get()
-  //     );
-
-  //     const attemptList = gameGuesses.totalAttempts.slice(0, rounds - 1);
-
-  //     const expectedGuessHistory = deserializeCombinationHistory(
-  //       zkapp.packedGuessHistory.get()
-  //     );
-
-  //     const separatedHistory = Array.from({ length: rounds - 1 }, (_, i) =>
-  //       separateCombinationDigits(expectedGuessHistory[i]).map(Number)
-  //     );
-
-  //     expect(separatedHistory).toEqual(attemptList);
-
-  //     expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
-
-  //     expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
-
-  //     expect(isSolved.toBoolean()).toEqual(true);
-
-  //     expect(zkapp.codeBreakerId.get()).toEqual(
-  //       Poseidon.hash(codeBreakerPubKey.toFields())
-  //     );
-
-  //     await expectClaimRewardToFail(
-  //       codeMasterPubKey,
-  //       codeMasterKey,
-  //       expectedMsg
-  //     );
-  //   });
-
-  //   it('Should generate a proof with randomly chosen actions for unsolved game and fail to settle.', async () => {
-  //     const rounds = 3;
-  //     const expectedMsg = 'You are not the winner of this game!';
-  //     const winnerFlag = 'unsolved';
-
-  //     const unsolvedProof = await generateTestProofs(
-  //       winnerFlag,
-  //       rounds,
-  //       codeMasterSalt,
-  //       secretCombination,
-  //       codeBreakerKey,
-  //       codeMasterKey
-  //     );
-
-  //     const publicOutputs = unsolvedProof.publicOutput;
-
-  //     await submitGameProof(unsolvedProof, codeBreakerPubKey, false);
-
-  //     const { turnCount, isSolved } = GameState.unpack(
-  //       zkapp.compressedState.get()
-  //     );
-
-  //     expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
-  //     expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
-  //     expect(isSolved.toBoolean()).toEqual(false);
-  //     expect(zkapp.codeBreakerId.get()).toEqual(
-  //       Poseidon.hash(codeBreakerPubKey.toFields())
-  //     );
-
-  //     await expectClaimRewardToFail(
-  //       codeMasterPubKey,
-  //       codeMasterKey,
-  //       expectedMsg
-  //     );
-  //     await expectClaimRewardToFail(
-  //       codeBreakerPubKey,
-  //       codeBreakerKey,
-  //       expectedMsg
-  //     );
-  //   });
-
-  //   it('Should generate a proof with predefined actions for unsolved game and fail to settle.', async () => {
-  //     const rounds = 3;
-  //     const expectedMsg = 'You are not the winner of this game!';
-  //     const winnerFlag = 'unsolved';
-
-  //     const unsolvedProof = await generateTestProofs(
-  //       winnerFlag,
-  //       rounds,
-  //       codeMasterSalt,
-  //       secretCombination,
-  //       codeBreakerKey,
-  //       codeMasterKey,
-  //       gameGuesses
-  //     );
-
-  //     const publicOutputs = unsolvedProof.publicOutput;
-
-  //     await submitGameProof(unsolvedProof, codeBreakerPubKey, false);
-
-  //     const { turnCount, isSolved } = GameState.unpack(
-  //       zkapp.compressedState.get()
-  //     );
-
-  //     const attemptList = gameGuesses.totalAttempts.slice(0, rounds);
-  //     const expectedGuessHistory = deserializeCombinationHistory(
-  //       zkapp.packedGuessHistory.get()
-  //     );
-
-  //     const separatedHistory = Array.from({ length: rounds }, (_, i) =>
-  //       separateCombinationDigits(expectedGuessHistory[i]).map(Number)
-  //     );
-
-  //     expect(separatedHistory).toEqual(attemptList);
-  //     expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
-  //     expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
-  //     expect(isSolved.toBoolean()).toEqual(false);
-  //     expect(zkapp.codeBreakerId.get()).toEqual(
-  //       Poseidon.hash(codeBreakerPubKey.toFields())
-  //     );
-
-  //     await expectClaimRewardToFail(
-  //       codeMasterPubKey,
-  //       codeMasterKey,
-  //       expectedMsg
-  //     );
-  //     await expectClaimRewardToFail(
-  //       codeBreakerPubKey,
-  //       codeBreakerKey,
-  //       expectedMsg
-  //     );
-  //   });
-  // });
+      expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
+
+      expect(isSolved.toBoolean()).toEqual(true);
+
+      expect(zkapp.codeBreakerId.get()).toEqual(
+        Poseidon.hash(codeBreakerPubKey.toFields())
+      );
+
+      await expectClaimRewardToFail(
+        codeMasterPubKey,
+        codeMasterKey,
+        expectedMsg
+      );
+    });
+
+    it('Should generate a proof with predefined actions for codeBreaker victory and settle.', async () => {
+      const rounds = 3;
+      const winnerFlag = 'codebreaker-victory';
+
+      const expectedMsg = 'You are not the winner of this game!';
+
+      const CBVictoryProof = await generateTestProofs(
+        winnerFlag,
+        rounds,
+        codeMasterSalt,
+        secretCombination,
+        codeBreakerKey,
+        codeMasterKey,
+        gameGuesses
+      );
+
+      await submitGameProof(CBVictoryProof, codeBreakerPubKey, true);
+
+      const publicOutputs = CBVictoryProof.publicOutput;
+
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
+
+      const attemptList = gameGuesses.totalAttempts.slice(0, rounds - 1);
+
+      const separatedHistory = Array.from({ length: rounds - 1 }, (_, i) =>
+        Combination.getElementFromHistory(
+          zkapp.packedGuessHistory.get(),
+          Field(i)
+        ).digits.map(Number)
+      );
+
+      expect(separatedHistory).toEqual(attemptList);
+
+      expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
+
+      expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
+
+      expect(isSolved.toBoolean()).toEqual(true);
+
+      expect(zkapp.codeBreakerId.get()).toEqual(
+        Poseidon.hash(codeBreakerPubKey.toFields())
+      );
+
+      await expectClaimRewardToFail(
+        codeMasterPubKey,
+        codeMasterKey,
+        expectedMsg
+      );
+    });
+
+    it('Should generate a proof with randomly chosen actions for unsolved game and fail to settle.', async () => {
+      const rounds = 3;
+      const expectedMsg = 'You are not the winner of this game!';
+      const winnerFlag = 'unsolved';
+
+      const unsolvedProof = await generateTestProofs(
+        winnerFlag,
+        rounds,
+        codeMasterSalt,
+        secretCombination,
+        codeBreakerKey,
+        codeMasterKey
+      );
+
+      const publicOutputs = unsolvedProof.publicOutput;
+
+      await submitGameProof(unsolvedProof, codeBreakerPubKey, false);
+
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
+
+      expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
+      expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
+      expect(isSolved.toBoolean()).toEqual(false);
+      expect(zkapp.codeBreakerId.get()).toEqual(
+        Poseidon.hash(codeBreakerPubKey.toFields())
+      );
+
+      await expectClaimRewardToFail(
+        codeMasterPubKey,
+        codeMasterKey,
+        expectedMsg
+      );
+      await expectClaimRewardToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        expectedMsg
+      );
+    });
+
+    it('Should generate a proof with predefined actions for unsolved game and fail to settle.', async () => {
+      const rounds = 3;
+      const expectedMsg = 'You are not the winner of this game!';
+      const winnerFlag = 'unsolved';
+
+      const unsolvedProof = await generateTestProofs(
+        winnerFlag,
+        rounds,
+        codeMasterSalt,
+        secretCombination,
+        codeBreakerKey,
+        codeMasterKey,
+        gameGuesses
+      );
+
+      const publicOutputs = unsolvedProof.publicOutput;
+
+      await submitGameProof(unsolvedProof, codeBreakerPubKey, false);
+
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
+
+      const attemptList = gameGuesses.totalAttempts.slice(0, rounds);
+      const separatedHistory = Array.from({ length: rounds }, (_, i) =>
+        Combination.getElementFromHistory(
+          zkapp.packedGuessHistory.get(),
+          Field(i)
+        ).digits.map(Number)
+      );
+
+      expect(separatedHistory).toEqual(attemptList);
+      expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
+      expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
+      expect(isSolved.toBoolean()).toEqual(false);
+      expect(zkapp.codeBreakerId.get()).toEqual(
+        Poseidon.hash(codeBreakerPubKey.toFields())
+      );
+
+      await expectClaimRewardToFail(
+        codeMasterPubKey,
+        codeMasterKey,
+        expectedMsg
+      );
+      await expectClaimRewardToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        expectedMsg
+      );
+    });
+  });
 });
