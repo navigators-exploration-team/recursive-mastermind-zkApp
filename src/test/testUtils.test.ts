@@ -5,6 +5,7 @@ import {
   secretCombination,
 } from './testUtils';
 import { StepProgram } from '../stepProgram';
+import { Combination } from '../utils';
 
 describe('Should generate StepProgramProof for given parameters', () => {
   let codeMasterKey: PrivateKey;
@@ -28,8 +29,8 @@ describe('Should generate StepProgramProof for given parameters', () => {
   });
 
   it('Should generate codeMaster victory proof with random actions', async () => {
-    // On-chain limit for maxAttempts (if not specified for a custom value) is 15. Any attempts equal to 15 and not solved (or any attempts that is greater than 15) would lead to codemaster's victory.
-    const rounds = 15;
+    // On-chain limit for maxAttempts (if not specified for a custom value) is 7. Any attempts equal to 7 and not solved (or any attempts that is greater than 7) would lead to codemaster's victory.
+    const rounds = 7;
     const winnerFlag = 'codemaster-victory';
     const salt = codeMasterSalt;
 
@@ -44,10 +45,9 @@ describe('Should generate StepProgramProof for given parameters', () => {
 
     const publicOutputs = proof.publicOutput;
 
-    // Get outputted numbers and history
-    const outputNumbers = separateCombinationDigits(
-      proof.publicOutput.lastGuess
-    );
+    const outputNumbers = Combination.decompress(
+      proof.publicOutput.lastCompressedGuess
+    ).digits;
 
     const computedHash = Poseidon.hash([...outputNumbers, salt]);
 
@@ -59,7 +59,7 @@ describe('Should generate StepProgramProof for given parameters', () => {
   });
 
   it('Should generate codeBreaker victory proof with random actions', async () => {
-    const rounds = 7;
+    const rounds = 3;
     const winnerFlag = 'codebreaker-victory';
     const actions = gameGuesses;
     const salt = codeMasterSalt;
@@ -75,7 +75,9 @@ describe('Should generate StepProgramProof for given parameters', () => {
 
     const publicOutputs = proof.publicOutput;
 
-    const outputNumbers = separateCombinationDigits(publicOutputs.lastGuess);
+    const outputNumbers = Combination.decompress(
+      proof.publicOutput.lastCompressedGuess
+    ).digits;
 
     // Getting until round - 1, since in proof generation first round - 1 elements are used before secret combination.
     const attemptList = actions.totalAttempts.slice(0, rounds - 1);
@@ -85,14 +87,14 @@ describe('Should generate StepProgramProof for given parameters', () => {
     const solutionHash = publicOutputs.solutionHash;
 
     expect(solutionHash).toEqual(computedHash);
-    expect(outputNumbers.map(Number)).toEqual([6, 3, 8, 4]);
+    expect(outputNumbers.map(Number)).toEqual([6, 3, 1, 4]);
     expect(BigInt(rounds)).toEqual(
       publicOutputs.turnCount.sub(1).div(2).toBigInt()
     );
   });
 
   it('Should generate an unsolved game proof with random actions.', async () => {
-    const rounds = 10;
+    const rounds = 4;
     const winnerFlag = 'unsolved';
     const salt = codeMasterSalt;
 
@@ -108,7 +110,9 @@ describe('Should generate StepProgramProof for given parameters', () => {
 
     const publicOutputs = proof.publicOutput;
 
-    const outputNumbers = separateCombinationDigits(publicOutputs.lastGuess);
+    const outputNumbers = Combination.decompress(
+      proof.publicOutput.lastCompressedGuess
+    ).digits;
 
     const computedHash = Poseidon.hash([...outputNumbers, salt]);
     const solutionHash = publicOutputs.solutionHash;
@@ -121,7 +125,7 @@ describe('Should generate StepProgramProof for given parameters', () => {
   });
 
   it('Should generate codeMaster victory proof with predefined actions.', async () => {
-    const rounds = 15;
+    const rounds = 7;
     const winnerFlag = 'codemaster-victory';
     const salt = codeMasterSalt;
 
@@ -138,15 +142,15 @@ describe('Should generate StepProgramProof for given parameters', () => {
     const publicOutputs = proof.publicOutput;
 
     // Get outputted numbers and history
-    const outputNumbers = separateCombinationDigits(
-      proof.publicOutput.lastGuess
-    );
+    const outputNumbers = Combination.decompress(
+      proof.publicOutput.lastCompressedGuess
+    ).digits;
 
-    const history = deserializeCombinationHistory(
-      proof.publicOutput.packedGuessHistory
-    );
     const separatedHistory = Array.from({ length: rounds }, (_, i) =>
-      separateCombinationDigits(history[i]).map(Number)
+      Combination.getElementFromHistory(
+        proof.publicOutput.packedGuessHistory,
+        Field(i)
+      ).digits.map(Number)
     );
     const attemptList = gameGuesses.totalAttempts.slice(0, rounds);
 
@@ -160,14 +164,14 @@ describe('Should generate StepProgramProof for given parameters', () => {
 
     expect(separatedHistory).toEqual(attemptList);
     expect(solutionHash).not.toEqual(computedHash);
-    expect(outputNumbers.map(Number)).toEqual([8, 3, 5, 2]);
+    expect(outputNumbers.map(Number)).toEqual([5, 3, 2, 1]);
     expect(BigInt(rounds)).toEqual(
       publicOutputs.turnCount.sub(1).div(2).toBigInt()
     );
   });
 
   it('Should generate codeBreaker victory proof with predefined actions', async () => {
-    const rounds = 7;
+    const rounds = 3;
     const winnerFlag = 'codebreaker-victory';
     const actions = gameGuesses;
     const salt = codeMasterSalt;
@@ -184,12 +188,14 @@ describe('Should generate StepProgramProof for given parameters', () => {
 
     const publicOutputs = proof.publicOutput;
 
-    const outputNumbers = separateCombinationDigits(publicOutputs.lastGuess);
-    const history = deserializeCombinationHistory(
-      publicOutputs.packedGuessHistory
-    );
+    const outputNumbers = Combination.decompress(
+      proof.publicOutput.lastCompressedGuess
+    ).digits;
     const separatedHistory = Array.from({ length: rounds }, (_, i) =>
-      separateCombinationDigits(history[i]).map(Number)
+      Combination.getElementFromHistory(
+        proof.publicOutput.packedGuessHistory,
+        Field(i)
+      ).digits.map(Number)
     );
 
     // Getting until round - 1, since in proof generation first round - 1 elements are used before secret combination.
@@ -201,14 +207,14 @@ describe('Should generate StepProgramProof for given parameters', () => {
 
     expect(separatedHistory).toEqual(attemptList);
     expect(solutionHash).toEqual(computedHash);
-    expect(outputNumbers.map(Number)).toEqual([6, 3, 8, 4]);
+    expect(outputNumbers.map(Number)).toEqual([6, 3, 1, 4]);
     expect(BigInt(rounds)).toEqual(
       publicOutputs.turnCount.sub(1).div(2).toBigInt()
     );
   });
 
   it('Should generate an unsolved game proof with predefined actions.', async () => {
-    const rounds = 10;
+    const rounds = 4;
     const winnerFlag = 'unsolved';
     const salt = codeMasterSalt;
 
@@ -224,13 +230,15 @@ describe('Should generate StepProgramProof for given parameters', () => {
 
     const publicOutputs = proof.publicOutput;
 
-    const outputNumbers = separateCombinationDigits(publicOutputs.lastGuess);
+    const outputNumbers = Combination.decompress(
+      proof.publicOutput.lastCompressedGuess
+    ).digits;
 
-    const history = deserializeCombinationHistory(
-      publicOutputs.packedGuessHistory
-    );
     const separatedHistory = Array.from({ length: rounds }, (_, i) =>
-      separateCombinationDigits(history[i]).map(Number)
+      Combination.getElementFromHistory(
+        proof.publicOutput.packedGuessHistory,
+        Field(i)
+      ).digits.map(Number)
     );
 
     const attemptList = gameGuesses.totalAttempts.slice(0, rounds);
