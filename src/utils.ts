@@ -3,6 +3,18 @@ import { MAX_ATTEMPTS } from './constants.js';
 
 export { Combination, Clue, GameState };
 
+/**
+ * `Combination` is a class that represents a combination of digits for both the secret combination and the guesses.
+ *  @param digits - An array of 4 unique digits between 1 and 7.
+ *
+ * @method `from` - Creates a new Combination instance from an array of numbers.
+ * @method `toBits` - Converts the combination to a bit array.
+ * @method `compress` - Compresses the combination into a single field element.
+ * @method `decompress` - Decompresses the combination from a single field element.
+ * @method `validate` - Validates the combination to ensure all digits are unique and within the range [1, 7].
+ * @method `updateHistory` - Updates the history of combinations with the new combination.
+ * @method `getElementFromHistory` - Retrieves an element from the history based on the index.
+ */
 class Combination extends Struct({
   digits: Provable.Array(Field, 4),
 }) {
@@ -100,6 +112,17 @@ class Combination extends Struct({
   }
 }
 
+/**
+ * `Clue` is a class that represents the clue given by the codeMaster after each guess.
+ *  @param hits - The number of correct digits in the correct position.
+ *  @param blows - The number of correct digits in the wrong position.
+ *
+ * @method `compress` - Compresses the clue into a single field element.
+ * @method `decompress` - Decompresses the clue from a single field element.
+ * @method `giveClue` - Generates a clue based on the guess and solution.
+ * @method `isSolved` - Checks if the game is solved based on the clue.
+ * @method `updateHistory` - Updates the history of clues with the new clue.
+ */
 class Clue extends Struct({
   hits: Field,
   blows: Field,
@@ -162,6 +185,16 @@ class Clue extends Struct({
   }
 }
 
+/**
+ * `GameState` is a class that represents the state of the game.
+ *  @param rewardAmount - The total reward amount for the game.
+ *  @param finalizeSlot - The slot at which the game is finalized.
+ *  @param turnCount - The number of turns taken in the game.
+ *  @param isSolved - A flag indicating whether the game is solved or not.
+ *
+ *  @method `pack` - Packs the game state into a single field element.
+ *  @method `unpack` - Unpacks the game state from a single field element.
+ */
 class GameState extends Struct({
   rewardAmount: UInt64,
   finalizeSlot: UInt32,

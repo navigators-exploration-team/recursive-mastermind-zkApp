@@ -24,10 +24,10 @@ class PublicInputs extends Struct({
 /**
  * @param `codeMasterId` and `codeBreakerId` should be same with the on-chain values of players.
  * @param `solutionHash` should also be same with the one on-chain value.
- * @param `lastGuess` and `serializedClue` are the values obtained from the `makeGuess` and `giveClue` methods, respectively.
+ * @param `lastCompressedGuess` and `lastcompressedClue` are the values obtained from the `makeGuess` and `giveClue` methods, respectively.
  * @param `turnCount` is the turn count of the game. Even turn counts represent the turns of code master and odd turn counts represent the turn of the code breaker.
- * @param `packedGuessHistory` is a serialized data that keeps all guesses done so far.
- * @param `packedClueHistory` is a serialized data that keeps all clues given so far.
+ * @param `packedGuessHistory` is a compressed data that keeps all guesses done so far.
+ * @param `packedClueHistory` is a compressed data that keeps all clues given so far.
  */
 class PublicOutputs extends Struct({
   codeMasterId: Field,
@@ -47,9 +47,9 @@ const StepProgram = ZkProgram({
 
   methods: {
     /**
-     * Creates a new game by setting the secret combination and salt. You can think of this as base case of the recursion.
+     * Creates a new game by setting the **secret combination** and salt. You can think of this as base case of the recursion.
      * @param authInputs contains the public key and signature of the code master to verify the authenticity of the caller.
-     * Signature message should be the concatenation of the `secretCombination` and `salt`.
+     * Signature message should be the concatenation of the **secret combination** digits and `salt`.
      * @param secretCombination secret combination to be solved by the codeBreaker.
      * @param salt the salt to be used in the hash function to prevent pre-image attacks.
      * @returns the proof of the new game and the public output.
@@ -85,9 +85,9 @@ const StepProgram = ZkProgram({
     /**
      * Allows the codeBreaker to make a guess and then gives it to the codeMaster to provide a clue.
      * @param authInputs contains the public key and signature of the code breaker to verify the authenticity of the caller.
-     * Signature message should be the concatenation of the `unseparatedGuess` and `turnCount`.
+     * Signature message should be the concatenation of the `guessCombination` and `turnCount`.
      * @param previousClue the proof of the previous game state. It contains the last clue given by the codeMaster.
-     * @param unseparatedGuess the guess made by the codeBreaker.
+     * @param guessCombination the guess made by the codeBreaker.
      * @returns the proof of the updated game state and the public output.
      * The codeBreaker can only make a guess if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
      */
@@ -99,8 +99,10 @@ const StepProgram = ZkProgram({
         guessCombination: Combination
       ) {
         previousClue.verify();
+        guessCombination.validate();
 
         const turnCount = previousClue.publicOutput.turnCount.value;
+
         turnCount
           .isEven()
           .assertFalse('Please wait for the codeMaster to give you a clue!');
@@ -125,8 +127,6 @@ const StepProgram = ZkProgram({
           .or(turnCount.equals(1))
           .assertTrue('You are not the codeBreaker of this game!');
 
-        guessCombination.validate();
-
         const packedGuessHistory = Combination.updateHistory(
           guessCombination,
           previousClue.publicOutput.packedGuessHistory,
@@ -148,9 +148,9 @@ const StepProgram = ZkProgram({
     /**
      * Allows the codeMaster to give a clue to the codeBreaker based on the guess made.
      * @param authInputs contains the public key and signature of the code master to verify the authenticity of the caller.
-     * Signature message should be the concatenation of the `unseparatedSecretCombination`, `salt`, and `turnCount`.
+     * Signature message should be the concatenation of the `secretCombination`, `salt`, and `turnCount`.
      * @param previousGuess the proof of the previous game state. It contains the last guess made by the codeBreaker.
-     * @param unseparatedSecretCombination the secret combination to be solved by the codeBreaker.
+     * @param secretCombination the secret combination to be solved by the codeBreaker.
      * @param salt the salt to be used in the hash function to prevent pre-image attacks.
      * @returns the proof of the updated game state and the public output.
      * The codeMaster can only give a clue if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
@@ -166,6 +166,7 @@ const StepProgram = ZkProgram({
         previousGuess.verify();
 
         const turnCount = previousGuess.publicOutput.turnCount.value;
+
         turnCount
           .isEven()
           .and(turnCount.equals(0).not())
@@ -181,21 +182,13 @@ const StepProgram = ZkProgram({
             'Only the codeMaster of this game is allowed to give clue!'
           );
 
-        const computedCodemasterId = Poseidon.hash(
-          authInputs.authPubKey.toFields()
-        );
-
         previousGuess.publicOutput.codeMasterId.assertEquals(
-          computedCodemasterId,
+          Poseidon.hash(authInputs.authPubKey.toFields()),
           'Only the codeMaster of this game is allowed to give clue!'
         );
 
-        const computedSolutionHash = Poseidon.hash([
-          ...secretCombination.digits,
-          salt,
-        ]);
         previousGuess.publicOutput.solutionHash.assertEquals(
-          computedSolutionHash,
+          Poseidon.hash([...secretCombination.digits, salt]),
           'The secret combination is not compliant with the initial hash from game creation!'
         );
 
@@ -203,7 +196,7 @@ const StepProgram = ZkProgram({
           previousGuess.publicOutput.lastCompressedGuess
         );
 
-        let clue = Clue.giveClue(lastGuess.digits, secretCombination.digits);
+        const clue = Clue.giveClue(lastGuess.digits, secretCombination.digits);
 
         const packedClueHistory = Clue.updateHistory(
           clue,
