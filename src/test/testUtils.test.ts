@@ -17,14 +17,10 @@ describe('Should generate StepProgramProof for given parameters', () => {
     codeBreakerKey = PrivateKey.random();
     codeMasterKey = PrivateKey.random();
     codeMasterSalt = Field.random();
-
-    const proofsEnabled = false;
-
-    // Can be changed depending on need.
     secret = secretCombination;
 
     await StepProgram.compile({
-      proofsEnabled,
+      proofsEnabled: false,
     });
   });
 
