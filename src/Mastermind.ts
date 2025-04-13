@@ -108,13 +108,6 @@ class MastermindZkApp extends SmartContract {
       this.compressedState.getAndRequireEquals()
     ).finalizeSlot;
 
-    const currentSlot = this.network.globalSlotSinceGenesis.get();
-    // extend network precondition in case of skipped slots
-    this.network.globalSlotSinceGenesis.requireBetween(
-      currentSlot,
-      finalizeSlot.sub(UInt32.from(1))
-    );
-
     // When reward claimed, finalizeSlot is set to 0, but codeBreakerId is not
     finalizeSlot
       .equals(UInt32.zero)
@@ -123,9 +116,15 @@ class MastermindZkApp extends SmartContract {
         'The game has already been finalized and the reward has been claimed!'
       );
 
-    finalizeSlot.assertGreaterThan(
-      UInt32.zero,
-      'The game has not been accepted by the codeBreaker yet!'
+    finalizeSlot
+      .equals(UInt32.zero)
+      .assertFalse('The game has not been accepted by the codeBreaker yet!');
+
+    const currentSlot = this.network.globalSlotSinceGenesis.get();
+    // extend network precondition in case of skipped slots
+    this.network.globalSlotSinceGenesis.requireBetween(
+      currentSlot,
+      finalizeSlot.sub(UInt32.from(1))
     );
 
     currentSlot.assertLessThan(

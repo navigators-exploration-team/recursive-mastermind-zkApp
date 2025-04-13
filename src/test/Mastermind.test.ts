@@ -753,7 +753,7 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Reject calling acceptGame method before initGame', async () => {
-      const expectedMsg = 'The game has not been initialized yet!';
+      const expectedMsg = 'The game has not been created yet!';
       await expectAcceptGameToFail(
         codeBreakerPubKey,
         codeBreakerKey,
@@ -762,7 +762,8 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Reject calling submitGameProof method before initGame', async () => {
-      const expectedMsg = 'The game has not been initialized yet!';
+      const expectedMsg =
+        'The game has not been accepted by the codeBreaker yet!';
       await expectProofSubmissionToFail(
         wrongProof,
         codeMasterPubKey,
