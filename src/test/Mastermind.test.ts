@@ -211,7 +211,9 @@ describe('Mastermind ZkApp Tests', () => {
   ) {
     const deployerAccount = deployerKey.toPublicKey();
     const refereeAccount = refereeKey.toPublicKey();
-    const secretCombination = Combination.from(secretCombinationNumbers);
+    const secretCombination = new Combination({
+      digits: secretCombinationNumbers.map((n) => Field(n)),
+    });
 
     try {
       const tx = await Mina.transaction(
@@ -565,6 +567,29 @@ describe('Mastermind ZkApp Tests', () => {
   }
 
   /**
+   * Helper function to expect forfeitWin to fail.
+   */
+  async function expectForfeitWinToFail(
+    playerPubKey: PublicKey,
+    expectedMsg?: string
+  ) {
+    try {
+      const tx = await Mina.transaction(
+        { sender: refereeKey.toPublicKey(), fee },
+        async () => {
+          await zkapp.forfeitWin(playerPubKey);
+        }
+      );
+      await waitTransactionAndFetchAccount(tx, [refereeKey]);
+    } catch (error: any) {
+      log(error);
+      expect(error.message).toContain(expectedMsg);
+      return;
+    }
+    throw new Error('Forfeit win should have failed');
+  }
+
+  /**
    * Helper function to fetch the latest block and return the global slot
    */
   async function getGlobalSlot() {
@@ -752,60 +777,234 @@ describe('Mastermind ZkApp Tests', () => {
       await deployZkApp(zkapp, codeMasterKey, zkappPrivateKey);
     });
 
-    it('Reject calling acceptGame method before initGame', async () => {
-      const expectedMsg = 'The game has not been created yet!';
-      await expectAcceptGameToFail(
-        codeBreakerPubKey,
-        codeBreakerKey,
-        expectedMsg
-      );
+    describe('Reject other methods before initGame', () => {
+      it('Reject calling acceptGame method call', async () => {
+        const expectedMsg = 'The game has not been created yet!';
+        await expectAcceptGameToFail(
+          codeBreakerPubKey,
+          codeBreakerKey,
+          expectedMsg
+        );
+      });
+
+      it('Reject calling submitGameProof method call', async () => {
+        const expectedMsg =
+          'The game has not been accepted by the codeBreaker yet!';
+        await expectProofSubmissionToFail(
+          wrongProof,
+          codeMasterPubKey,
+          expectedMsg
+        );
+      });
+
+      it('Reject makeGuess method call', async () => {
+        const expectedMsg =
+          'The game has not been accepted by the codeBreaker yet!';
+        await expectMakeGuessToFail(
+          codeBreakerPubKey,
+          codeBreakerKey,
+          Combination.from([2, 1, 3, 4]),
+          expectedMsg
+        );
+      });
+
+      it('Reject giveClue method call', async () => {
+        const expectedMsg =
+          'The game has not been accepted by the codeBreaker yet!';
+        await expectGiveClueToFail(
+          codeMasterPubKey,
+          codeMasterKey,
+          Combination.from([2, 1, 3, 4]),
+          codeMasterSalt,
+          expectedMsg
+        );
+      });
     });
 
-    it('Reject calling submitGameProof method before initGame', async () => {
-      const expectedMsg =
-        'The game has not been accepted by the codeBreaker yet!';
-      await expectProofSubmissionToFail(
-        wrongProof,
-        codeMasterPubKey,
-        expectedMsg
-      );
-    });
+    describe('Reject invalid initGame calls', () => {
+      it('Reject initGame if reward amount is 0', async () => {
+        const expectedMsg = 'The reward amount must be greater than zero!';
+        REWARD_AMOUNT = 0;
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          secretCombination,
+          codeMasterSalt,
+          refereeKey,
+          expectedMsg
+        );
+        REWARD_AMOUNT = 100000;
+      });
 
-    it('Reject initGame if reward amount is 0', async () => {
-      const expectedMsg = 'The reward amount must be greater than zero!';
-      REWARD_AMOUNT = 0;
-      await expectInitializeGameToFail(
-        zkapp,
-        codeMasterKey,
-        secretCombination,
-        codeMasterSalt,
-        refereeKey,
-        expectedMsg
-      );
-      REWARD_AMOUNT = 100000;
-    });
+      it('Reject initGame with invalid secret: first digit is 0', async () => {
+        const expectedMsg = 'Combination digit 1 is not in range [1, 7]!';
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          [0, 1, 2, 3],
+          codeMasterSalt,
+          refereeKey,
+          expectedMsg
+        );
+      });
 
-    it('Reject makeGuess before initGame', async () => {
-      const expectedMsg =
-        'The game has not been accepted by the codeBreaker yet!';
-      await expectMakeGuessToFail(
-        codeBreakerPubKey,
-        codeBreakerKey,
-        Combination.from([2, 1, 3, 4]),
-        expectedMsg
-      );
-    });
+      it('Reject initGame with invalid secret: first digit is greater than 7', async () => {
+        const expectedMsg = 'Combination digit 1 is not in range [1, 7]!';
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          [8, 5, 2, 1],
+          codeMasterSalt,
+          refereeKey,
+          expectedMsg
+        );
+      });
 
-    it('Reject giveClue before initGame', async () => {
-      const expectedMsg =
-        'The game has not been accepted by the codeBreaker yet!';
-      await expectGiveClueToFail(
-        codeMasterPubKey,
-        codeMasterKey,
-        Combination.from([2, 1, 3, 4]),
-        codeMasterSalt,
-        expectedMsg
-      );
+      it('Reject initGame with invalid secret: second digit is 0', async () => {
+        const expectedMsg = 'Combination digit 2 is not in range [1, 7]!';
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          [7, 0, 2, 5],
+          codeMasterSalt,
+          refereeKey,
+          expectedMsg
+        );
+      });
+
+      it('Reject initGame with invalid secret: second digit is greater than 7', async () => {
+        const expectedMsg = 'Combination digit 2 is not in range [1, 7]!';
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          [2, 9, 1, 5],
+          codeMasterSalt,
+          refereeKey,
+          expectedMsg
+        );
+      });
+
+      it('Reject initGame with invalid secret: third digit is 0', async () => {
+        const expectedMsg = 'Combination digit 3 is not in range [1, 7]!';
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          [7, 1, 0, 5],
+          codeMasterSalt,
+          refereeKey,
+          expectedMsg
+        );
+      });
+
+      it('Reject initGame with invalid secret: third digit is greater than 7', async () => {
+        const expectedMsg = 'Combination digit 3 is not in range [1, 7]!';
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          [2, 5, 9, 1],
+          codeMasterSalt,
+          refereeKey,
+          expectedMsg
+        );
+      });
+
+      it('Reject initGame with invalid secret: fourth digit is 0', async () => {
+        const expectedMsg = 'Combination digit 4 is not in range [1, 7]!';
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          [3, 1, 2, 0],
+          codeMasterSalt,
+          refereeKey,
+          expectedMsg
+        );
+      });
+
+      it('Reject initGame with invalid secret: fourth digit is greater than 7', async () => {
+        const expectedMsg = 'Combination digit 4 is not in range [1, 7]!';
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          [2, 5, 1, 9],
+          codeMasterSalt,
+          refereeKey,
+          expectedMsg
+        );
+      });
+
+      it('Reject initGame with invalid secret: duplicate digits', async () => {
+        const expectedMsg = 'Combination digit 2 is not unique!';
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          [1, 1, 2, 3],
+          codeMasterSalt,
+          refereeKey,
+          expectedMsg
+        );
+      });
+
+      it('Should reject codeMaster with invalid secret combination: second digit is not unique', async () => {
+        const expectedErrorMessage = 'Combination digit 2 is not unique!';
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          [2, 2, 5, 3],
+          codeMasterSalt,
+          refereeKey,
+          expectedErrorMessage
+        );
+      });
+
+      it('Should reject codeMaster with invalid secret combination: third digit is not unique', async () => {
+        const expectedErrorMessage = 'Combination digit 3 is not unique!';
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          [1, 4, 4, 6],
+          codeMasterSalt,
+          refereeKey,
+          expectedErrorMessage
+        );
+      });
+
+      it('Should reject codeMaster with invalid secret combination: fourth digit is not unique', async () => {
+        const expectedErrorMessage = 'Combination digit 4 is not unique!';
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          [3, 1, 5, 5],
+          codeMasterSalt,
+          refereeKey,
+          expectedErrorMessage
+        );
+      });
+
+      it('Should reject codeMaster with invalid secret combination: all digits same and exceeding 7', async () => {
+        const expectedErrorMessage =
+          'Combination digit 1 is not in range [1, 7]!';
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          [24, 24, 24, 24],
+          codeMasterSalt,
+          refereeKey,
+          expectedErrorMessage
+        );
+      });
+
+      it('Should reject codeMaster with invalid secret combination: all digits same and equal 0', async () => {
+        const expectedErrorMessage =
+          'Combination digit 1 is not in range [1, 7]!';
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          [0, 0, 0, 0],
+          codeMasterSalt,
+          refereeKey,
+          expectedErrorMessage
+        );
+      });
     });
 
     it('Initializes the game successfully', async () => {
@@ -854,37 +1053,45 @@ describe('Mastermind ZkApp Tests', () => {
       log(expect.getState().currentTestName);
     });
 
-    it('Reject submitGameProof before acceptGame', async () => {
-      const expectedMsg =
-        'The game has not been accepted by the codeBreaker yet!';
-      await expectProofSubmissionToFail(
-        wrongProof,
-        codeMasterPubKey,
-        expectedMsg
-      );
-    });
+    describe('Reject dependent methods before acceptGame', () => {
+      it('Reject submitGameProof before acceptGame', async () => {
+        const expectedMsg =
+          'The game has not been accepted by the codeBreaker yet!';
+        await expectProofSubmissionToFail(
+          wrongProof,
+          codeMasterPubKey,
+          expectedMsg
+        );
+      });
 
-    it('Reject makeGuess before acceptGame', async () => {
-      const expectedMsg =
-        'The game has not been accepted by the codeBreaker yet!';
-      await expectMakeGuessToFail(
-        codeBreakerPubKey,
-        codeBreakerKey,
-        Combination.from([2, 1, 3, 4]),
-        expectedMsg
-      );
-    });
+      it('Reject forfeitWin before acceptGame', async () => {
+        const expectedMsg =
+          'The game has not been accepted by the codeBreaker yet!';
+        await expectForfeitWinToFail(codeMasterPubKey, expectedMsg);
+      });
 
-    it('Reject giveClue before acceptGame', async () => {
-      const expectedMsg =
-        'The game has not been accepted by the codeBreaker yet!';
-      await expectGiveClueToFail(
-        codeMasterPubKey,
-        codeMasterKey,
-        Combination.from([2, 1, 3, 4]),
-        codeMasterSalt,
-        expectedMsg
-      );
+      it('Reject makeGuess before acceptGame', async () => {
+        const expectedMsg =
+          'The game has not been accepted by the codeBreaker yet!';
+        await expectMakeGuessToFail(
+          codeBreakerPubKey,
+          codeBreakerKey,
+          Combination.from([2, 1, 3, 4]),
+          expectedMsg
+        );
+      });
+
+      it('Reject giveClue before acceptGame', async () => {
+        const expectedMsg =
+          'The game has not been accepted by the codeBreaker yet!';
+        await expectGiveClueToFail(
+          codeMasterPubKey,
+          codeMasterKey,
+          Combination.from([2, 1, 3, 4]),
+          codeMasterSalt,
+          expectedMsg
+        );
+      });
     });
 
     it('Accept the game successfully', async () => {
@@ -931,7 +1138,7 @@ describe('Mastermind ZkApp Tests', () => {
       await expectClaimRewardToFail(intruderPubKey, intruderKey, expectedMsg);
     });
 
-    it('Submit with correct game proof and wrong winner', async () => {
+    it('Submit with correct game proof and wrong winner pubkey', async () => {
       await submitGameProof(completedProof, codeMasterPubKey, false);
 
       const { turnCount, isSolved } = GameState.unpack(

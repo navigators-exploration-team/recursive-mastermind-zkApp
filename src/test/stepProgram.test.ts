@@ -306,7 +306,7 @@ describe('Mastermind ZkProgram Tests', () => {
     });
 
     it('CodeBreaker should make a guess successfully', async () => {
-      await makeGuess([1, 5, 6, 2]);
+      await makeGuess([7, 5, 6, 2]);
       expectedPublicOutput(
         undefined,
         undefined,
@@ -367,7 +367,7 @@ describe('Mastermind ZkProgram Tests', () => {
       await giveClue(secretNumbers);
       expect(lastClue.compress()).toEqual(
         new Clue({
-          hits: Field.from(1),
+          hits: Field.from(0),
           blows: Field.from(1),
         }).compress()
       );
