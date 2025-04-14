@@ -786,7 +786,8 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Reject makeGuess before initGame', async () => {
-      const expectedMsg = 'The game has not been initialized yet!';
+      const expectedMsg =
+        'The game has not been accepted by the codeBreaker yet!';
       await expectMakeGuessToFail(
         codeBreakerPubKey,
         codeBreakerKey,
@@ -796,7 +797,8 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Reject giveClue before initGame', async () => {
-      const expectedMsg = 'The game has not been initialized yet!';
+      const expectedMsg =
+        'The game has not been accepted by the codeBreaker yet!';
       await expectGiveClueToFail(
         codeMasterPubKey,
         codeMasterKey,
