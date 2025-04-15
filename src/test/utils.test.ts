@@ -24,7 +24,11 @@ describe('utility.ts unit tests', () => {
     describe('derive Combination from random numbers', () => {
       it('should create a valid Combination from an array of 4 digits in [1..7]', () => {
         const randomNumbers = generateRandomCombinationNumbers(4);
+        const expected = new Combination({
+          digits: randomNumbers.map((number) => Field(number)),
+        });
         expect(() => Combination.from(randomNumbers)).not.toThrow();
+        expect(Combination.from(randomNumbers)).toEqual(expected);
       });
       it('should throw an error if the array length is greater than 4', () => {
         const randomNumbers = generateRandomCombinationNumbers(5);
@@ -167,7 +171,6 @@ describe('utility.ts unit tests', () => {
           ...Field(0).toBits().slice(12),
         ]);
       });
-
       it('should compress the combination correctly for [5, 6, 7, 1]', () => {
         const combination = Combination.from([5, 6, 7, 1]);
         const compressed = combination.compress();
@@ -211,6 +214,22 @@ describe('utility.ts unit tests', () => {
           ...Field(5).toBits(3),
           ...Field(0).toBits().slice(12),
         ]);
+      });
+      it('should throw an error if a digit is greater than 7', () => {
+        const combination = new Combination({
+          digits: [Field(1), Field(2), Field(3), Field(8)],
+        });
+        expect(() => combination.compress()).toThrow(
+          'Field.toBits(): 8 does not fit in 3 bits'
+        );
+      });
+      it('should throw an error if a digit is greater than 7', () => {
+        const combination = new Combination({
+          digits: [Field(7), Field(14), Field(3), Field(8)],
+        });
+        expect(() => combination.compress()).toThrow(
+          'Field.toBits(): 14 does not fit in 3 bits'
+        );
       });
     });
 
@@ -622,7 +641,6 @@ describe('utility.ts unit tests', () => {
         expect(clue.hits).toEqual(Field(4));
         expect(clue.blows).toEqual(Field(0));
       });
-
       it('should give the correct clue for guess=[1, 2, 3, 4] and solution=[4, 3, 2, 1]', () => {
         const guess = [Field(1), Field(2), Field(3), Field(4)];
         const solution = [Field(4), Field(3), Field(2), Field(1)];
@@ -630,7 +648,6 @@ describe('utility.ts unit tests', () => {
         expect(clue.hits).toEqual(Field(0));
         expect(clue.blows).toEqual(Field(4));
       });
-
       it('should give the correct clue for guess=[1, 2, 3, 4] and solution=[1, 3, 2, 4]', () => {
         const guess = [Field(1), Field(2), Field(3), Field(4)];
         const solution = [Field(1), Field(3), Field(2), Field(4)];
@@ -644,6 +661,36 @@ describe('utility.ts unit tests', () => {
         const clue = Clue.giveClue(guess, solution);
         expect(clue.hits).toEqual(Field(0));
         expect(clue.blows).toEqual(Field(4));
+      });
+      it('should give the correct clue for guess=[4, 7, 6, 1] and solution=[2, 1, 4, 3]', () => {
+        const guess = [Field(4), Field(7), Field(6), Field(1)];
+        const solution = [Field(2), Field(1), Field(4), Field(3)];
+        const clue = Clue.giveClue(guess, solution);
+        expect(clue.hits).toEqual(Field(0));
+        expect(clue.blows).toEqual(Field(2));
+      });
+      it('should give the correct clue for guess=[3, 2, 6, 7] and solution=[2, 5, 3, 1]', () => {
+        const guess = [Field(3), Field(2), Field(6), Field(7)];
+        const solution = [Field(2), Field(5), Field(3), Field(1)];
+        const clue = Clue.giveClue(guess, solution);
+        expect(clue.hits).toEqual(Field(0));
+        expect(clue.blows).toEqual(Field(2));
+      });
+
+      it('should give the correct clue for guess=[4, 2, 1, 7] and solution=[4, 5, 1, 3]', () => {
+        const guess = [Field(4), Field(2), Field(1), Field(7)];
+        const solution = [Field(4), Field(5), Field(1), Field(3)];
+        const clue = Clue.giveClue(guess, solution);
+        expect(clue.hits).toEqual(Field(2));
+        expect(clue.blows).toEqual(Field(0));
+      });
+
+      it('should give the correct clue for guess=[5, 3, 1, 6] and solution=[4, 5, 1, 6]', () => {
+        const guess = [Field(5), Field(3), Field(1), Field(6)];
+        const solution = [Field(4), Field(5), Field(1), Field(6)];
+        const clue = Clue.giveClue(guess, solution);
+        expect(clue.hits).toEqual(Field(2));
+        expect(clue.blows).toEqual(Field(1));
       });
     });
 

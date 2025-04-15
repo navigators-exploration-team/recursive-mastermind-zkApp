@@ -4,7 +4,9 @@ import { PublicOutputs, StepProgram, StepProgramProof } from '../stepProgram';
 import {
   StepProgramCreateGame,
   StepProgramGiveClue,
+  StepProgramGiveClueInvalidSignature,
   StepProgramMakeGuess,
+  StepProgramMakeGuessInvalidSignature,
 } from './testUtils';
 
 const proofsEnabled = false;
@@ -70,25 +72,62 @@ describe('Mastermind ZkProgram Tests', () => {
       await StepProgramCreateGame(combination, codeMasterSalt, codeMasterKey);
     }).rejects.toThrowError(expectedErrorMessage);
   }
-  async function expectGuessToFail(
+  async function expectMakeGuessToFail(
     guess: number[],
     expectedErrorMessage?: string,
-    signerKey = codeBreakerKey
+    signerKey = codeBreakerKey,
+    invalidSignatureConfig?: {
+      wrongPubKey: boolean;
+      wrongMessage: boolean;
+      wrongSigner: boolean;
+    }
   ) {
-    await expect(async () => {
-      await StepProgramMakeGuess(lastProof, guess, signerKey);
-    }).rejects.toThrowError(expectedErrorMessage);
+    const makeGuess = invalidSignatureConfig
+      ? async () => {
+          await StepProgramMakeGuessInvalidSignature(
+            lastProof,
+            guess,
+            signerKey,
+            invalidSignatureConfig
+          );
+        }
+      : async () => {
+          await StepProgramMakeGuess(lastProof, guess, signerKey);
+        };
+    if (expectedErrorMessage)
+      await expect(makeGuess).rejects.toThrowError(expectedErrorMessage);
+    else await expect(makeGuess).rejects.toThrow();
   }
 
   async function expectGiveClueToFail(
     combination: number[],
     expectedErrorMessage?: string,
     signerKey = codeMasterKey,
-    signerSalt = codeMasterSalt
+    signerSalt = codeMasterSalt,
+    invalidSignatureConfig?: {
+      wrongPubKey: boolean;
+      wrongMessage: boolean;
+      wrongSigner: boolean;
+    }
   ) {
-    const giveClue = async () => {
-      await StepProgramGiveClue(lastProof, combination, signerSalt, signerKey);
-    };
+    const giveClue = invalidSignatureConfig
+      ? async () => {
+          await StepProgramGiveClueInvalidSignature(
+            lastProof,
+            combination,
+            signerSalt,
+            signerKey,
+            invalidSignatureConfig
+          );
+        }
+      : async () => {
+          await StepProgramGiveClue(
+            lastProof,
+            combination,
+            signerSalt,
+            signerKey
+          );
+        };
 
     if (expectedErrorMessage)
       await expect(giveClue).rejects.toThrowError(expectedErrorMessage);
@@ -248,54 +287,98 @@ describe('Mastermind ZkProgram Tests', () => {
       it('Should reject codeBreaker with invalid guess combination: first digit is 0', async () => {
         const expectedErrorMessage =
           'Combination digit 1 is not in range [1, 7]!';
-        await expectGuessToFail([0, 2, 3, 4], expectedErrorMessage);
+        await expectMakeGuessToFail([0, 2, 3, 4], expectedErrorMessage);
       });
       it('Should reject codeBreaker with invalid guess combination: first digit is greater than 7', async () => {
         const expectedErrorMessage =
           'Combination digit 1 is not in range [1, 7]!';
-        await expectGuessToFail([8, 2, 3, 4], expectedErrorMessage);
+        await expectMakeGuessToFail([8, 2, 3, 4], expectedErrorMessage);
       });
       it('Should reject codeBreaker with invalid guess combination: second digit is 0', async () => {
         const expectedErrorMessage =
           'Combination digit 2 is not in range [1, 7]!';
-        await expectGuessToFail([1, 0, 3, 4], expectedErrorMessage);
+        await expectMakeGuessToFail([1, 0, 3, 4], expectedErrorMessage);
       });
       it('Should reject codeBreaker with invalid guess combination: second digit is greater than 7', async () => {
         const expectedErrorMessage =
           'Combination digit 2 is not in range [1, 7]!';
-        await expectGuessToFail([1, 9, 3, 4], expectedErrorMessage);
+        await expectMakeGuessToFail([1, 9, 3, 4], expectedErrorMessage);
       });
       it('Should reject codeBreaker with invalid guess combination: third digit is 0', async () => {
         const expectedErrorMessage =
           'Combination digit 3 is not in range [1, 7]!';
-        await expectGuessToFail([1, 2, 0, 4], expectedErrorMessage);
+        await expectMakeGuessToFail([1, 2, 0, 4], expectedErrorMessage);
       });
       it('Should reject codeBreaker with invalid guess combination: third digit is greater than 7', async () => {
         const expectedErrorMessage =
           'Combination digit 3 is not in range [1, 7]!';
-        await expectGuessToFail([1, 2, 10, 4], expectedErrorMessage);
+        await expectMakeGuessToFail([1, 2, 10, 4], expectedErrorMessage);
       });
       it('Should reject codeBreaker with invalid guess combination: fourth digit is 0', async () => {
         const expectedErrorMessage =
           'Combination digit 4 is not in range [1, 7]!';
-        await expectGuessToFail([1, 2, 3, 0], expectedErrorMessage);
+        await expectMakeGuessToFail([1, 2, 3, 0], expectedErrorMessage);
       });
       it('Should reject codeBreaker with invalid guess combination: fourth digit is greater than 7', async () => {
         const expectedErrorMessage =
           'Combination digit 4 is not in range [1, 7]!';
-        await expectGuessToFail([1, 2, 3, 12], expectedErrorMessage);
+        await expectMakeGuessToFail([1, 2, 3, 12], expectedErrorMessage);
       });
       it('Should reject codeBreaker with invalid guess combination: second digit is not unique', async () => {
         const expectedErrorMessage = 'Combination digit 2 is not unique!';
-        await expectGuessToFail([1, 1, 2, 6], expectedErrorMessage);
+        await expectMakeGuessToFail([1, 1, 2, 6], expectedErrorMessage);
       });
       it('Should reject codeBreaker with invalid guess combination: third digit is not unique', async () => {
         const expectedErrorMessage = 'Combination digit 3 is not unique!';
-        await expectGuessToFail([1, 2, 2, 6], expectedErrorMessage);
+        await expectMakeGuessToFail([1, 2, 2, 6], expectedErrorMessage);
       });
       it('Should reject codeBreaker with invalid guess combination: fourth digit is not unique', async () => {
         const expectedErrorMessage = 'Combination digit 4 is not unique!';
-        await expectGuessToFail([1, 2, 3, 1], expectedErrorMessage);
+        await expectMakeGuessToFail([1, 2, 3, 1], expectedErrorMessage);
+      });
+    });
+
+    describe('Invalid code breaker signature', () => {
+      it('Should reject codeBreaker with invalid signature: wrong public key', async () => {
+        const expectedErrorMessage = 'Invalid signature!';
+        await expectMakeGuessToFail(
+          [1, 2, 3, 4],
+          expectedErrorMessage,
+          codeBreakerKey,
+          {
+            wrongPubKey: true,
+            wrongMessage: false,
+            wrongSigner: false,
+          }
+        );
+      });
+
+      it('Should reject codeBreaker with invalid signature: wrong message', async () => {
+        const expectedErrorMessage = 'Invalid signature!';
+        await expectMakeGuessToFail(
+          [1, 2, 3, 4],
+          expectedErrorMessage,
+          codeBreakerKey,
+          {
+            wrongPubKey: false,
+            wrongMessage: true,
+            wrongSigner: false,
+          }
+        );
+      });
+
+      it('Should reject codeBreaker with invalid signature: wrong signer', async () => {
+        const expectedErrorMessage = 'Invalid signature!';
+        await expectMakeGuessToFail(
+          [1, 2, 3, 4],
+          expectedErrorMessage,
+          codeBreakerKey,
+          {
+            wrongPubKey: false,
+            wrongMessage: false,
+            wrongSigner: true,
+          }
+        );
       });
     });
 
@@ -319,7 +402,7 @@ describe('Mastermind ZkProgram Tests', () => {
     it('Should reject makeGuess in the wrong turn', async () => {
       const expectedErrorMessage =
         'Please wait for the codeMaster to give you a clue!';
-      await expectGuessToFail([2, 3, 4, 5], expectedErrorMessage);
+      await expectMakeGuessToFail([2, 3, 4, 5], expectedErrorMessage);
     });
   });
 
@@ -363,6 +446,52 @@ describe('Mastermind ZkProgram Tests', () => {
       );
     });
 
+    describe('Invalid code master signature', () => {
+      it('Should reject codeMaster with invalid signature: wrong public key', async () => {
+        const expectedErrorMessage =
+          'Only the codeMaster of this game is allowed to give clue!';
+        await expectGiveClueToFail(
+          [1, 2, 3, 4],
+          expectedErrorMessage,
+          codeMasterKey,
+          codeMasterSalt,
+          {
+            wrongPubKey: true,
+            wrongMessage: false,
+            wrongSigner: false,
+          }
+        );
+      });
+      it('Should reject codeMaster with invalid signature: wrong message', async () => {
+        const expectedErrorMessage = 'Invalid signature!';
+        await expectGiveClueToFail(
+          [1, 2, 3, 4],
+          expectedErrorMessage,
+          codeMasterKey,
+          codeMasterSalt,
+          {
+            wrongPubKey: false,
+            wrongMessage: true,
+            wrongSigner: false,
+          }
+        );
+      });
+      it('Should reject codeMaster with invalid signature: wrong signer', async () => {
+        const expectedErrorMessage = 'Invalid signature!';
+        await expectGiveClueToFail(
+          [1, 2, 3, 4],
+          expectedErrorMessage,
+          codeMasterKey,
+          codeMasterSalt,
+          {
+            wrongPubKey: false,
+            wrongMessage: false,
+            wrongSigner: true,
+          }
+        );
+      });
+    });
+
     it('CodeMaster should give clue successfully', async () => {
       await giveClue(secretNumbers);
       expect(lastClue.compress()).toEqual(
@@ -382,37 +511,129 @@ describe('Mastermind ZkProgram Tests', () => {
   });
 
   describe('Second guess', () => {
-    it('Should reject any caller other than the codeBreaker', async () => {
-      const expectedErrorMessage = 'You are not the codeBreaker of this game!';
-      await expectGuessToFail(
-        [1, 4, 7, 2],
-        expectedErrorMessage,
-        PrivateKey.random()
-      );
+    describe('Invalid code breaker signature', () => {
+      it('Should reject codeBreaker with invalid signature: wrong public key', async () => {
+        const expectedErrorMessage =
+          'You are not the codeBreaker of this game!';
+        await expectMakeGuessToFail(
+          [1, 4, 7, 2],
+          expectedErrorMessage,
+          codeBreakerKey,
+          {
+            wrongPubKey: true,
+            wrongMessage: false,
+            wrongSigner: false,
+          }
+        );
+      });
+
+      it('Should reject codeBreaker with invalid signature: wrong message', async () => {
+        const expectedErrorMessage = 'Invalid signature!';
+        await expectMakeGuessToFail(
+          [1, 4, 7, 2],
+          expectedErrorMessage,
+          codeBreakerKey,
+          {
+            wrongPubKey: false,
+            wrongMessage: true,
+            wrongSigner: false,
+          }
+        );
+      });
+
+      it('Should reject codeBreaker with invalid signature: wrong signer', async () => {
+        const expectedErrorMessage = 'Invalid signature!';
+        await expectMakeGuessToFail(
+          [1, 4, 7, 2],
+          expectedErrorMessage,
+          codeBreakerKey,
+          {
+            wrongPubKey: false,
+            wrongMessage: false,
+            wrongSigner: true,
+          }
+        );
+      });
     });
 
-    it('Should accept valid guess', async () => {
-      await makeGuess([1, 4, 7, 2]);
+    describe('Make guess and try again', () => {
+      it('Should accept valid guess', async () => {
+        await makeGuess([1, 4, 7, 2]);
 
-      expectedPublicOutput();
+        expectedPublicOutput();
+      });
+
+      it('Should reject the codebraker from calling this method out of sequence', async () => {
+        const expectedErrorMessage =
+          'Please wait for the codeMaster to give you a clue!';
+        await expectMakeGuessToFail([1, 2, 4, 6], expectedErrorMessage);
+      });
     });
 
-    it('Should reject the codebraker from calling this method out of sequence', async () => {
-      const expectedErrorMessage =
-        'Please wait for the codeMaster to give you a clue!';
-      await expectGuessToFail([1, 2, 4, 6], expectedErrorMessage);
+    describe('Invalid code master signature', () => {
+      it('Should reject codeMaster with invalid signature: wrong public key', async () => {
+        const expectedErrorMessage =
+          'Only the codeMaster of this game is allowed to give clue!';
+        await expectGiveClueToFail(
+          [1, 2, 3, 4],
+          expectedErrorMessage,
+          codeMasterKey,
+          codeMasterSalt,
+          {
+            wrongPubKey: true,
+            wrongMessage: false,
+            wrongSigner: false,
+          }
+        );
+      });
+      it('Should reject codeMaster with invalid signature: wrong message', async () => {
+        const expectedErrorMessage = 'Invalid signature!';
+        await expectGiveClueToFail(
+          [1, 2, 3, 4],
+          expectedErrorMessage,
+          codeMasterKey,
+          codeMasterSalt,
+          {
+            wrongPubKey: false,
+            wrongMessage: true,
+            wrongSigner: false,
+          }
+        );
+      });
+      it('Should reject codeMaster with invalid signature: wrong signer', async () => {
+        const expectedErrorMessage = 'Invalid signature!';
+        await expectGiveClueToFail(
+          [1, 2, 3, 4],
+          expectedErrorMessage,
+          codeMasterKey,
+          codeMasterSalt,
+          {
+            wrongPubKey: false,
+            wrongMessage: false,
+            wrongSigner: true,
+          }
+        );
+      });
     });
 
-    it('code Master should give clue successfully', async () => {
-      await giveClue(secretNumbers);
-      expect(lastClue.compress()).toEqual(
-        new Clue({
-          hits: Field.from(1),
-          blows: Field.from(2),
-        }).compress()
-      );
+    describe('Give clue and try again', () => {
+      it('code Master should give clue successfully', async () => {
+        await giveClue(secretNumbers);
+        expect(lastClue.compress()).toEqual(
+          new Clue({
+            hits: Field.from(1),
+            blows: Field.from(2),
+          }).compress()
+        );
 
-      expectedPublicOutput();
+        expectedPublicOutput();
+      });
+
+      it('Should reject the codeMaster from calling this method out of sequence', async () => {
+        const expectedErrorMessage =
+          'Please wait for the codeBreaker to make a guess!';
+        await expectGiveClueToFail([1, 2, 3, 4], expectedErrorMessage);
+      });
     });
   });
 
@@ -425,7 +646,7 @@ describe('Mastermind ZkProgram Tests', () => {
     it('Should reject the codebraker from calling this method out of sequence', async () => {
       const expectedErrorMessage =
         'Please wait for the codeMaster to give you a clue!';
-      await expectGuessToFail([1, 2, 4, 6], expectedErrorMessage);
+      await expectMakeGuessToFail([1, 2, 4, 6], expectedErrorMessage);
     });
     it('code Master should give clue successfully', async () => {
       await giveClue(secretNumbers);
@@ -453,7 +674,7 @@ describe('Mastermind ZkProgram Tests', () => {
     it('Should reject the codebraker from calling this method out of sequence', async () => {
       const expectedErrorMessage =
         'Please wait for the codeMaster to give you a clue!';
-      await expectGuessToFail([1, 2, 4, 6], expectedErrorMessage);
+      await expectMakeGuessToFail([1, 2, 4, 6], expectedErrorMessage);
     });
     it('code Master should give clue successfully', async () => {
       await giveClue(secretNumbers);
@@ -486,7 +707,7 @@ describe('Mastermind ZkProgram Tests', () => {
     it('Should reject the codebraker from calling this method out of sequence', async () => {
       const expectedErrorMessage =
         'Please wait for the codeMaster to give you a clue!';
-      await expectGuessToFail([1, 2, 4, 6], expectedErrorMessage);
+      await expectMakeGuessToFail([1, 2, 4, 6], expectedErrorMessage);
     });
 
     it('code Master should give clue successfully', async () => {
@@ -518,7 +739,7 @@ describe('Mastermind ZkProgram Tests', () => {
     it('Should reject the codebraker from calling this method out of sequence', async () => {
       const expectedErrorMessage =
         'Please wait for the codeMaster to give you a clue!';
-      await expectGuessToFail([1, 2, 4, 6], expectedErrorMessage);
+      await expectMakeGuessToFail([1, 2, 4, 6], expectedErrorMessage);
     });
 
     it('code Master should give clue successfully', async () => {
@@ -569,7 +790,7 @@ describe('Mastermind ZkProgram Tests', () => {
     it('Should reject next guess: secret is already solved', async () => {
       const expectedErrorMessage =
         'You have already solved the secret combination!';
-      await expectGuessToFail([1, 2, 3, 4], expectedErrorMessage);
+      await expectMakeGuessToFail([1, 2, 3, 4], expectedErrorMessage);
     });
 
     it('Should reject next clue: secret is already solved', async () => {
@@ -640,7 +861,7 @@ describe('Mastermind ZkProgram Tests', () => {
     it('Should reject next guess: secret is already solved', async () => {
       const expectedErrorMessage =
         'You have already solved the secret combination!';
-      await expectGuessToFail([1, 2, 3, 4], expectedErrorMessage);
+      await expectMakeGuessToFail([1, 2, 3, 4], expectedErrorMessage);
     });
 
     it('should reject next clue: secret is already solved', async () => {
