@@ -53,7 +53,7 @@
 ## Overview
 
 - The game involves two players: a `Code Master` and a `Code Breaker`.
-- Inspired by [mastermind-noir](https://github.com/vezenovm/mastermind-noir), this version replaces colored pegs with a combination of 4 unique, non-zero digits.
+- Inspired by [mastermind-noir](https://github.com/vezenovm/mastermind-noir), this version replaces colored pegs with a combination of 4 unique, non-zero digits between `1` and `7`.
 
 ## Game Rules
 
@@ -72,26 +72,27 @@
   | ------ | --- | --- | --- | --- |
   | Secret | 5   | 9   | 3   | 4   |
   | Guess  | 5   | 7   | 8   | 9   |
-  | Clue   | 2   | 0   | 0   | 1   |
+
+  |      | Hits | Blows |
+  | ---- | ---- | ----- |
+  | Clue | 1    | 1     |
 
   - Code Master's secret combination: **5 9 3 4**
   - Code Breaker's guess: **5 7 8 9**
-  - Clue: **2 0 0 1**
-    - Result: `1` hit and `1` blow.
-      - The hit is `5` in the first position.
-      - The blow is `9` in the fourth position.
+  - Result: `1` hit and `1` blow.
+    - The hit is `5` in the first position.
+    - The blow is `9` in the fourth position.
 
-- The game continues with alternating guesses and clues until the Code Breaker achieves 4 hits and uncovers the secret combination or fails to do so within the **maximum allowed attempts**.
+- The game continues with alternating guesses and clues until the Code Breaker achieves 4 hits and uncovers the secret combination or fails to do so within the **maximum allowed attempts = 7**.
 
 # Mastermind zkApp Structure
 
 Following the game rules, the [MastermindZkApp](./src/Mastermind.ts) should be deployed:
 
-- The game master uses the initGame method to set the secret of the game, set parameters such as maxAttempt and refereePubKey, set the reward amount for solving the game and send it to the contract. This method takes these parameters:
+- The game master uses the `initGame` method to set the secret of the game, set referee public key, set the reward amount for solving the game and send it to the contract. This method takes these parameters:
 
-  - `unseparatedSecretCombination`: The secret combination set by the Code Master.
+  - `secretCombination`: The secret combination set by the Code Master.
   - `salt`: A random field to salt the secret combination before hashing.
-  - `maxAttempts`: The maximum number of attempts allowed for the Code Breaker to guess the secret combination.
   - `refereePubKey`: The public key of the referee who will penalize misbehaving players.
   - `rewardAmount`: The amount of tokens to be rewarded to the codeBreaker upon solving the game.
 
@@ -103,7 +104,7 @@ Following the game rules, the [MastermindZkApp](./src/Mastermind.ts) should be d
 
 - The Code Breaker should analyze the given clue and make another meaningful guess.
 
-- The game continues by alternating between `makeGuess` and `giveClue` methods until the Code Breaker either uncovers the secret combination or fails by exceeding the allowed `maxAttempts`, concluding the game.
+- The game continues by alternating between `makeGuess` and `giveClue` methods until the Code Breaker either uncovers the secret combination or fails by exceeding the allowed `MAX_ATTEMPT = 7`, concluding the game.
 
 ![MastermindZkAppImage](./Mastermind.svg)
 
@@ -113,9 +114,14 @@ Now, let's dive deeper into the states and methods of our Mastermind zkApp.
 
 The Mastermind zkApp uses all 8 available states.
 
-### turnCountMaxAttemptsIsSolved
+### compressedState
 
-- This state is a compressed state variable that stores the current turn count, maximum number of attempts allowed, and whether the game has been solved. Uses `compressTurnCountMaxAttemptSolved` to compress the state variable. The state variable is decompressed using `separateTurnCountAndMaxAttemptSolved`.
+- The `compressedState` is a packed state variable that uses `GameState` class to compress and decompress the state variable.
+- The `GameState` class contains the following states:
+  - `rewardAmount` **(UInt64)** - the amount of tokens to be rewarded to the winner.
+  - `finalizeSlot` **(UInt32)** - the slot number when the game is hard finalized.
+  - `turnCount` **(UInt8)** - the number of turns taken in the game.
+  - `isSolved` **(Bool)** - indicates whether the secret combination has been solved.
 
 ### codemasterId & codebreakerId
 
@@ -141,22 +147,17 @@ The Mastermind zkApp uses all 8 available states.
 
 ### packedGuessHistory
 
-- This state is a compressed state variable that stores the history of all guesses made by the Code Breaker. It uses `serializeCombinationHistory` to compress the state variable. The state variable is decompressed using `deserializeCombinationHistory`.
+- This state is a compressed state variable that stores the history of all guesses made by the Code Breaker. It uses `Combination` class to compress the state by using `updateHistory` method.
 
-- Each guess is represented as a single Field value, with the four digits packed into one Field.
-  - For example, if the guess is `4 5 2 3`, this state would be stored as a Field value of `4523`.
+- Each guess is represented as a single `Field` value, with the four digits packed into one `Field` with bit manipulation.
+- Each digit is represented as a 3-bit number, allowing for a range of `1` to `7`. The digits are combined and stored on-chain as a `12-bit * MAX_ATTEMPT` field in decimal.
 
 ### packedClueHistory
 
-- This state is a compressed state variable that stores the history of all clues given by the Code Master. It uses `serializeClueHistory` to compress the state variable. The state variable is decompressed using `deserializeClueHistory`.
+- This state is a compressed state variable that stores the history of all clues given by the Code Master. It uses `Clue` class to compress the state by using `updateHistory` method.
 
-- Each clue is represented as a single Field value, with the four digits, each of which can be either `0`, `1`, or `2`, meaning the clue digits fall within the range of a 2-bit number. These digits are combined and stored on-chain as an 8-bit field in decimal.
-
-### rewardFinalizeSlot
-
-- This state is a compressed state variable that stores the (`UInt64`) reward amount and the (`UInt32`) slot when the game is finalized.
-
-- Uses `compressRewardAndFinalizeSlot` to compress the state variable. The state variable is decompressed using `separateRewardAndFinalizeSlot`.
+- Each clue is represented as a two `Field` value, with the hits and blows packed into one `Field` with bit manipulation.
+- Each clue is represented as a 3-bit number, allowing for a range of `0` to `4`. The hits and blows are combined and stored on-chain as a `6-bit * MAX_ATTEMPT` field in decimal.
 
 ## Mastermind Methods
 
@@ -166,22 +167,19 @@ This method should be called **first** and can be called **only once** to initia
 
 > It is recommended to call this method with the same transaction that deploys the zkApp, due to lower fee and security reasons.
 
-- `initGame` is the first method called to set up the game, initialize the secret combination, set the maximum number of attempts, and define the reward amount for the challenge and the referee's public key. The first user to call this method with valid inputs will be designated as the code master.
+- `initGame` is the first method called to set up the game, initialize the secret combination, define the reward amount for the challenge and the referee's public key. The first user to call this method with valid inputs will be designated as the code master.
 
 - This method takes five arguments:
 
-  - `unseparatedSecretCombination`: The secret combination set by the Code Master.
+  - `secretCombination`: The secret combination set by the Code Master.
   - `salt`: A random field to salt the secret combination before hashing.
-  - `maxAttempts`: The maximum number of attempts allowed for the Code Breaker to guess the secret combination.
   - `refereePubKey`: The public key of the referee who will penalize misbehaving players.
   - `rewardAmount`: The amount of tokens to be rewarded to the codeBreaker upon solving the game.
 
 - The method executes successfully when the following conditions are met:
 
   - The game is not already initialized.
-  - The `unseparatedSecretCombination` is split into an array of fields representing the four digits. An error is thrown if the number is not in the range of `1000` to `9999`.
-  - The separated digits are validated to ensure they are unique and non-zero, with errors thrown if they do not meet these criteria.
-  - The `maxAttempts` are validated to ensure they are within range of `3` to `5`.
+  - The `secretCombination` is validated with the `Combination` class, which separates the digits and checks for uniqueness and `1` to `7` range through the `validate` method.
   - The `rewardAmount` is received from the caller and stored in the contract.
   - The secret combination is then hashed with the salt and stored on-chain as `solutionHash`.
 
@@ -201,7 +199,6 @@ This method should be called **first** and can be called **only once** to initia
 
 - The method takes `proof` and `winnerPubKey` as arguments and updates the contract states when the following conditions are met:
 
-  - The game is initialized.
   - The game is accepted by the code breaker.
   - The game is not finalized (i.e., the finalize slot has not been reached), and the game is not solved.
   - The given proof is valid and belongs to the current game.
@@ -212,7 +209,7 @@ This method should be called **first** and can be called **only once** to initia
   - The game is solved (i.e., the code breaker has guessed the secret combination, or exceeded the maximum number of attempts).
   - The provided `winnerPubKey` hash is equal to the calculated winner's hash, which is the code breaker if the game is solved, or the code master if the game is not solved.
 
-  > The `winnerPubKey` is not mandatory to be provided correctly, but it is recommended to be provided to save the gas fee for the claimReward method. If the `winnerPubKey` is not provided or is incorrect, the contract will not transfer the reward to the winner, and the winner must call the `claimReward` method to claim their reward.
+  > If the `winnerPubKey` is not provided correctly, the contract will not transfer the reward to the winner, and the winner must call the `claimReward` method to claim their reward.
 
 - The method updates the `turnCount` and `isSolved` states based on the proof provided.
   > `isSolved` is set to `true` if the proof's turn count is not exceeding the max attempts and the game is solved.
@@ -236,7 +233,7 @@ This method should be called **first** and can be called **only once** to initia
 
 - The method can be called by the referee only, taking the `playerPubKey` as an argument. The method updates the contract states when the following conditions are met:
 
-  - The game is initialized and accepted by the code breaker.
+  - The game is accepted by the code breaker.
   - The caller is the referee.
   - The contract still has the reward (i.e., the claimReward method has not been called).
   - The provided `playerPubKey` is either the code master or the code breaker.
@@ -247,13 +244,13 @@ This method should be called **first** and can be called **only once** to initia
 
 - This method is not intended to be used in the normal game flow. It is used only for recovery purposes when the code breaker fails to send the proof to code master or server went down before the code master could finalize the game.
 
-- The method can be called by the code breaker only, taking the `unseparatedGuessCombination` as an argument. The method updates the contract states when the following conditions are met:
+- The method can be called by the code breaker only, taking the `guessCombination` as an argument. The method updates the contract states when the following conditions are met:
 
-  - The game is initialized and accepted by the code breaker.
+  - The game is is accepted by the code breaker.
   - The game is not finalized (i.e., the finalize slot has not been reached), and the game is not solved.
   - The caller is the code breaker.
-  - The provided `unseparatedGuessCombination` is a valid guess.
-  - The `turnCount` is less than the `maxAttempts` and **odd** (i.e., it is the code breaker's turn).
+  - The provided `guessCombination` is a valid guess.
+  - The `turnCount` is less than or equal the `2 * MAX_ATTEMPT = 14` and **odd** (i.e., it is the code breaker's turn).
 
 - After all the preceding checks pass, the code breaker's guess combination is validated, stored on-chain, and the `turnCount` is incremented. This then awaits the code master to read the guess and provide a clue.
 
@@ -264,18 +261,17 @@ This method should be called **first** and can be called **only once** to initia
 - Similar to the `makeGuess` method, there are a few restrictions on calling this method to maintain a consistent progression of the game:
 
   - The caller is restricted to be only the registered code master.
-  - The game must be initialized and accepted by the code breaker.
+  - The game must be accepted by the code breaker.
   - The correct sequence is enforced by checking that `turnCount` is non-zero (to avoid colliding with the `createGame` method call) and even.
   - If the game `isSolved`, this method is blocked and cannot be executed.
-  - If the code breaker exceeds the `maxAttempts`, this method is blocked and cannot be executed.
-
-- After the preceding checks pass, the plain `unseparatedSecretCombination` input is separated into 4 digits, hashed along with the salt, and asserted against the `solutionHash` state to ensure the integrity of the secret.
+  - The game must not be finalized (i.e., the finalize slot has not been reached), and the game is not solved.
+  - The `turnCount` is less than or equal to `2 * MAX_ATTEMPT = 14` and **even** (i.e., it is the code master's turn).
+  - The provided `secretCombination` and `salt` are valid and match the stored `solutionHash`.
 
 - Next, the guess from the previous turn is fetched, separated, and compared against the secret combination digits to provide a clue:
 
-  - If the clue results in 4 hits (e.g., `2 2 2 2`), the game is marked as solved, and the `isSolved` state is set to `Bool(true)`.
-  - The clue is then serialized into `4` 2-bit Fields, packed as an 8-bit field in decimal, and stored on-chain.
-  - Note that this technique requires the adversary to deserialize and correctly interpret the digits before making the next guess.
+  - The clue is generated with `Clue` class, which compares the digits of the guess and the secret combination and returns the hits and blows.
+  - If the clue results in 4 hits the game is marked as solved, and the `isSolved` state is set to `Bool(true)`.
 
 - Finally, the `turnCount` is incremented, making it odd and awaiting the code breaker to deserialize and read the clue before making a meaningful guess—assuming the game is not already solved or has not reached the maximum number of attempts.
 
@@ -294,7 +290,7 @@ This method should be called **first** and can be called **only once** to initia
 
 - `codeMasterId` and `codeBreakerId`: should be same with the on-chain values of players.
 - `solutionHash`: should also be same with the one on-chain value.
-- `lastGuess` and `serializedClue`: are the values obtained from the `makeGuess` and `giveClue` methods, respectively.
+- `lastCompressedGuess` and `lastcompressedClue`: are the values obtained from the `makeGuess` and `giveClue` methods, respectively.
 - `turnCount`: is the turn count of the game. Even turn counts represent the turns of code master and odd turn counts represent the turn of the code breaker.
 - `packedGuessHistory`: is a serialized data that keeps all guesses done so far.
 - `packedClueHistory`: is a serialized data that keeps all clues given so far.
@@ -307,21 +303,21 @@ This method should be called **first** and can be called **only once** to initia
 
 - The method takes two arguments as **private inputs** besides the public inputs:
 
-  - `unseparatedSecretCombination`: The secret combination set by the Code Master.
+  - `secretCombination`: The secret combination set by the Code Master.
   - `salt`: A random field to salt the secret combination before hashing.
 
 - The method returns the _Step Program Proof_ with public outputs of the Step Program, if the following conditions are met:
 
-  - The `unseparatedSecretCombination` is valid as specified in the `initGame` method.
+  - The `secretCombination` is valid as specified in the `initGame` method.
   - The provided signature is valid for the given public key. (Will be saved as `codeMasterId`)
 
 ### makeGuess
 
 - This method is called by the Code Breaker to generate a step proof with the guess combination by using recursion.
 
-- The method takes the `unseparatedGuess` and `previous proof` as private inputs besides the public inputs:
+- The method takes the `guessCombination` and `previous proof` as private inputs besides the public inputs:
 
-  - `unseparatedGuess`: The guess combination made by the Code Breaker.
+  - `guessCombination`: The guess combination made by the Code Breaker.
   - `previousProof`: The previous proof generated by the Code Master.
 
 - The method appends last guess to the `packedGuessHistory` and updates the public outputs of the Step Program, when the following conditions are met:
@@ -333,9 +329,9 @@ This method should be called **first** and can be called **only once** to initia
 
 - This method is called by the Code Master to generate a step proof with the clue combination by using recursion.
 
-- The method takes the `unseparatedSecretCombination`, `salt` and `previous proof` as private inputs besides the public inputs:
+- The method takes the `secretCombination`, `salt` and `previous proof` as private inputs besides the public inputs:
 
-  - `unseparatedSecretCombination`: The secret combination set by the Code Master.
+  - `secretCombination`: The secret combination set by the Code Master.
   - `salt`: A random field to salt the secret combination before hashing.
   - `previousProof`: The previous proof generated by the Code Breaker.
 
@@ -343,7 +339,7 @@ This method should be called **first** and can be called **only once** to initia
 
   - The `previousProof` is valid and belongs to the current game state (i.e., public outputs of the previous proof match the current game state).
   - The provided signature is valid for the given public key.(It need to be the same with the previous proof's `codeMasterId`)
-  - The hash of `unseparatedSecretCombination` and `salt` is equal to the `solutionHash` of the previous proof.
+  - The hash of `secretCombination` and `salt` is equal to the `solutionHash` of the previous proof.
   - The `turnCount` is even and greater than zero.
 
 ## Project Structure
@@ -360,8 +356,10 @@ src/
 │  └── Mastermind.test.ts
 │  └── mock.ts
 │  └── stepProgram.test.ts
+│  └── testUtils.test.ts
 │  └── testUtils.ts
 │  └── utils.test.ts
+├── constants.ts
 ├── index.ts
 ├── Mastermind.ts
 ├── stepProgram.ts
@@ -381,6 +379,10 @@ src/
   - **`stepProgram.test.ts`**: Contains unit tests for the `StepProgram` methods, ensuring the zkProgram generates proofs correctly and maintains the game state accurately.
 
   - **`utils.test.ts`**: Provides unit tests for the functions in `utils.ts`, ensuring each logic component works correctly before integration into the zkApp. This helps catch issues early and improves overall reliability.
+
+  - **`testUtils.test.ts`**: Contains unit tests for the functions in `testUtils.ts`, ensuring each logic component works correctly before integration into the zkApp. This helps catch issues early and improves overall reliability.
+
+- **`constants.ts`**: Contains constants used in the zkApp, such as `MAX_ATTEMPT`, and `PER_ATTEMPT_GAME_DURATION` which are essential for maintaining the game rules and logic.
 
 - **`index.ts`**: Serves as the entry point, importing and exporting all essential smart contract classes for the zkApp(s).
 
