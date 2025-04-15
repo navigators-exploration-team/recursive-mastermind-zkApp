@@ -1,6 +1,6 @@
 import { Field, PrivateKey, Signature } from 'o1js';
-import { compressCombinationDigits } from '../utils';
-import { StepProgram, StepProgramProof } from '../stepProgram';
+import { StepProgram, StepProgramProof } from '../stepProgram.js';
+import { Combination } from '../utils.js';
 
 export {
   StepProgramCreateGame,
@@ -19,14 +19,17 @@ const StepProgramCreateGame = async (
   salt: Field,
   codeMasterKey: PrivateKey
 ): Promise<StepProgramProof> => {
-  const unseparatedSecret = compressCombinationDigits(secret.map(Field));
+  const secretCombination = Combination.from(secret);
 
   const { proof } = await StepProgram.createGame(
     {
       authPubKey: codeMasterKey.toPublicKey(),
-      authSignature: Signature.create(codeMasterKey, [unseparatedSecret, salt]),
+      authSignature: Signature.create(codeMasterKey, [
+        ...secretCombination.digits,
+        salt,
+      ]),
     },
-    unseparatedSecret,
+    secretCombination,
     salt
   );
   return proof;
@@ -40,17 +43,17 @@ const StepProgramMakeGuess = async (
   guess: number[],
   codeBreakerKey: PrivateKey
 ): Promise<StepProgramProof> => {
-  const unseparatedGuess = compressCombinationDigits(guess.map(Field));
+  const guessCombination = Combination.from(guess);
   const { proof } = await StepProgram.makeGuess(
     {
       authPubKey: codeBreakerKey.toPublicKey(),
       authSignature: Signature.create(codeBreakerKey, [
-        unseparatedGuess,
+        ...guessCombination.digits,
         Field.from(prevProof.publicOutput.turnCount.toBigInt()),
       ]),
     },
     prevProof,
-    unseparatedGuess
+    guessCombination
   );
   return proof;
 };
@@ -64,35 +67,33 @@ const StepProgramGiveClue = async (
   salt: Field,
   codeMasterKey: PrivateKey
 ): Promise<StepProgramProof> => {
-  const unseparatedCombination = compressCombinationDigits(
-    combination.map(Field)
-  );
+  const secretCombination = Combination.from(combination);
   const { proof } = await StepProgram.giveClue(
     {
       authPubKey: codeMasterKey.toPublicKey(),
       authSignature: Signature.create(codeMasterKey, [
-        unseparatedCombination,
+        ...secretCombination.digits,
         salt,
         Field.from(prevProof.publicOutput.turnCount.toBigInt()),
       ]),
     },
     prevProof,
-    unseparatedCombination,
+    secretCombination,
     salt
   );
   return proof;
 };
 
 /**
- * Generates a random number between 1 and 9.
- * @returns - A randomly generated number between 1 and 9.
+ * Generates a random number between 1 and 7.
+ * @returns - A randomly generated number between 1 and 7.
  */
 function generateRandomNumber(): number {
-  return Math.floor(Math.random() * 9) + 1;
+  return Math.floor(Math.random() * 7) + 1;
 }
 
 /**
- * Generates an array of four unique random numbers between 1 and 9.
+ * Generates an array of four unique random numbers between 1 and 7.
  * The array is intended to be used as a guess in the game.
  * @returns - An array of four randomly generated numbers.
  */
@@ -230,9 +231,9 @@ const generateTestProofs = async (
           );
     return lastProof;
   } else if (flag === 'codebreaker-victory') {
-    if (rounds > 15)
+    if (rounds > 7)
       throw new Error(
-        "Maximum attempts for codebreaker victory case can't be more than 15!"
+        "Maximum attempts for codebreaker victory case can't be more than 7!"
       );
 
     lastProof =
@@ -261,9 +262,9 @@ const generateTestProofs = async (
     return await StepProgramGiveClue(lastProof, secret, salt, codeMasterKey);
   } else if (flag === 'unsolved') {
     if (guesses)
-      if (rounds > 15)
+      if (rounds > 7)
         throw new Error(
-          "Maximum attempts for unsolved case can't be more than 15!"
+          "Maximum attempts for unsolved case can't be more than 7!"
         );
 
     lastProof =
@@ -298,27 +299,27 @@ const generateTestProofs = async (
  * @property {number[][]} totalAttempts - A predefined sequence of guesses used during the game.
  *                                        Each nested array represents a single guess attempt.
  */
-const secretCombination = [6, 3, 8, 4];
+const secretCombination = [6, 3, 1, 4];
 
 const gameGuesses = {
   totalAttempts: [
     [2, 1, 3, 4],
-    [8, 3, 7, 1],
-    [3, 5, 8, 2],
-    [2, 8, 3, 5],
-    [5, 8, 3, 2],
+    [5, 3, 7, 1],
+    [3, 5, 1, 2],
+    [2, 4, 3, 5],
+    [5, 4, 3, 2],
     [5, 3, 7, 2],
-    [5, 3, 8, 1],
+    [5, 3, 2, 1],
     [3, 1, 7, 2],
-    [5, 4, 8, 2],
+    [5, 4, 6, 2],
     [5, 3, 6, 2],
-    [5, 3, 8, 9],
-    [5, 3, 8, 2],
-    [7, 3, 8, 2],
-    [5, 2, 8, 3],
-    [8, 3, 5, 2],
-    [8, 3, 3, 2],
-    [7, 1, 3, 8],
+    [5, 3, 6, 7],
+    [5, 3, 7, 2],
+    [7, 3, 5, 2],
+    [5, 2, 1, 3],
+    [4, 3, 5, 2],
+    [4, 3, 3, 2],
+    [7, 1, 3, 2],
     [4, 3, 5, 2],
     [4, 7, 3, 1],
   ],
