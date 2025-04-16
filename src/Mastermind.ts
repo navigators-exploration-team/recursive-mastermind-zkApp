@@ -166,9 +166,9 @@ class MastermindZkApp extends SmartContract {
     super.init();
 
     secretCombination.validate();
-    rewardAmount.assertGreaterThan(
-      UInt64.zero,
-      'The reward amount must be greater than zero!'
+    rewardAmount.assertGreaterThanOrEqual(
+      UInt64.from(1e10),
+      'The reward amount must be greater than or equal to 10 MINA!'
     );
 
     const sender = this.sender.getUnconstrained();
@@ -214,8 +214,8 @@ class MastermindZkApp extends SmartContract {
         'The game has already been accepted by the codeBreaker!'
       );
 
-    rewardAmount.assertGreaterThan(
-      UInt64.zero,
+    rewardAmount.assertGreaterThanOrEqual(
+      UInt64.from(1e10),
       'Code master reimbursement is already claimed!'
     );
 
@@ -266,6 +266,7 @@ class MastermindZkApp extends SmartContract {
     winnerPubKey: PublicKey
   ) {
     proof.verify();
+
     const codeMasterId = this.codeMasterId.getAndRequireEquals();
     const codeBreakerId = this.codeBreakerId.getAndRequireEquals();
     let { finalizeSlot, rewardAmount, turnCount, isSolved } = GameState.unpack(
@@ -413,18 +414,27 @@ class MastermindZkApp extends SmartContract {
    */
   @method async forfeitWin(playerPubKey: PublicKey) {
     const refereeId = this.refereeId.getAndRequireEquals();
+    const codeBreakerId = this.codeBreakerId.getAndRequireEquals();
+    const codeMasterId = this.codeMasterId.getAndRequireEquals();
+    let { rewardAmount, finalizeSlot, turnCount, isSolved } = GameState.unpack(
+      this.compressedState.getAndRequireEquals()
+    );
+
     refereeId.assertEquals(
       Poseidon.hash(this.sender.getAndRequireSignature().toFields()),
       'You are not the referee of this game!'
     );
 
-    const codeBreakerId = this.codeBreakerId.getAndRequireEquals();
-    const codeMasterId = this.codeMasterId.getAndRequireEquals();
-
     codeBreakerId.assertNotEquals(
       Field.from(0),
       'The game has not been accepted by the codeBreaker yet!'
     );
+
+    rewardAmount
+      .equals(UInt64.zero)
+      .assertFalse(
+        'There is no reward in the pool, the game is already finalized!'
+      );
 
     const playerID = Poseidon.hash(playerPubKey.toFields());
     const isCodeBreaker = codeBreakerId.equals(playerID);
@@ -433,14 +443,6 @@ class MastermindZkApp extends SmartContract {
     isCodeBreaker
       .or(isCodeMaster)
       .assertTrue('The provided public key is not a player in this game!');
-
-    let { rewardAmount, finalizeSlot, turnCount, isSolved } = GameState.unpack(
-      this.compressedState.getAndRequireEquals()
-    );
-
-    rewardAmount
-      .equals(UInt64.zero)
-      .assertFalse('There is no reward in the pool!');
 
     this.send({ to: playerPubKey, amount: rewardAmount });
 
