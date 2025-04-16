@@ -31,19 +31,35 @@ export default function Home() {
           ? result.makeGuessSeconds.reduce((a, b) => a + b, 0) /
             result.makeGuessSeconds.length
           : 0;
-        const avgCreateGame = result.baseGameSeconds;
+        const avgGiveClue = result.giveClueSeconds.length
+          ? result.giveClueSeconds.reduce((a, b) => a + b, 0) /
+            result.giveClueSeconds.length
+          : 0;
         appendFinalLog(`Step Length: ${result.stepLength}`);
         appendFinalLog(`Total Seconds: ${result.totalSeconds.toFixed(3)}`);
         appendFinalLog(
           `Deploy & Initialize: ${result.deployAndInitializeSeconds.toFixed(3)}`
         );
         appendFinalLog(`Accept Game: ${result.acceptGameSeconds.toFixed(3)}`);
-        appendFinalLog(`Base Game Proof Create: ${avgCreateGame.toFixed(3)}`);
+        appendFinalLog(
+          `Base Game Proof Create: ${result.baseGameSeconds.toFixed(3)}`
+        );
         appendFinalLog(`Make Guess (Avg): ${avgMakeGuess.toFixed(3)}`);
-        appendFinalLog(`Solved: ${result.isSolved ? 'Yes' : 'No'}`);
+        appendFinalLog(`Give Clue (Avg): ${avgGiveClue.toFixed(3)}`);
+        appendFinalLog(
+          `Make Guess: ${result.makeGuessSeconds
+            .map((time) => time.toFixed(3))
+            .join(', ')}`
+        );
+        appendFinalLog(
+          `Give Clue: ${result.giveClueSeconds
+            .map((time) => time.toFixed(3))
+            .join(', ')}`
+        );
         appendFinalLog(
           `Submit Game Proof: ${result.submitGameProofSeconds.toFixed(3)}`
         );
+        appendFinalLog(`Solved: ${result.isSolved ? 'Yes' : 'No'}`);
         appendFinalLog('--------------------------------------');
       };
 
@@ -143,30 +159,30 @@ export default function Home() {
 
       const benchmarkResults: BenchmarkResults[] = [];
 
-      updateProgress('Running benchmark for step length 3...');
+      updateProgress('Running benchmark for step length 1...');
       let result = await workerClient.solveBenchmark({
         secretCombination: [1, 2, 3, 4],
-        steps: steps.slice(12),
+        steps: steps.slice(6),
       });
       benchmarkResults.push(result);
       prettifyBenchmark(result);
       result = await workerClient.solveBenchmark({
         secretCombination: [4, 3, 2, 1],
-        steps: steps.slice(12),
+        steps: steps.slice(6),
       });
       benchmarkResults.push(result);
       prettifyBenchmark(result);
 
-      updateProgress('Running benchmark for step length 4...');
+      updateProgress('Running benchmark for step length 3...');
       result = await workerClient.solveBenchmark({
         secretCombination: [1, 2, 3, 4],
-        steps: steps.slice(11),
+        steps: steps.slice(4),
       });
       benchmarkResults.push(result);
       prettifyBenchmark(result);
       result = await workerClient.solveBenchmark({
         secretCombination: [4, 3, 2, 1],
-        steps: steps.slice(11),
+        steps: steps.slice(4),
       });
       benchmarkResults.push(result);
       prettifyBenchmark(result);
@@ -174,13 +190,27 @@ export default function Home() {
       updateProgress('Running benchmark for step length 5...');
       result = await workerClient.solveBenchmark({
         secretCombination: [1, 2, 3, 4],
-        steps: steps.slice(10),
+        steps: steps.slice(2),
       });
       benchmarkResults.push(result);
       prettifyBenchmark(result);
       result = await workerClient.solveBenchmark({
         secretCombination: [4, 3, 2, 1],
-        steps: steps.slice(10),
+        steps: steps.slice(2),
+      });
+      benchmarkResults.push(result);
+      prettifyBenchmark(result);
+
+      updateProgress('Running benchmark for step length 7...');
+      result = await workerClient.solveBenchmark({
+        secretCombination: [1, 2, 3, 4],
+        steps,
+      });
+      benchmarkResults.push(result);
+      prettifyBenchmark(result);
+      result = await workerClient.solveBenchmark({
+        secretCombination: [4, 3, 2, 1],
+        steps,
       });
       benchmarkResults.push(result);
       prettifyBenchmark(result);

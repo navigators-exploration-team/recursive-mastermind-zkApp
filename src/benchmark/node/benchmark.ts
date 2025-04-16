@@ -88,7 +88,7 @@ async function deployAndInitializeGame(
         secretCombination,
         codeMasterSalt,
         refereeAccount,
-        UInt64.from(10000)
+        UInt64.from(1e10)
       );
     }
   );
@@ -133,10 +133,14 @@ function prettifyAnalyzers(
 }
 
 function prettifyBenchmarks(result: BenchmarkResults) {
-  const avgCreateGame = result.baseGameSeconds;
   const avgMakeGuess = result.makeGuessSeconds.length
     ? result.makeGuessSeconds.reduce((a, b) => a + b, 0) /
       result.makeGuessSeconds.length
+    : 0;
+
+  const avgGiveClue = result.giveClueSeconds.length
+    ? result.giveClueSeconds.reduce((a, b) => a + b, 0) /
+      result.giveClueSeconds.length
     : 0;
 
   console.table([
@@ -148,13 +152,25 @@ function prettifyBenchmarks(result: BenchmarkResults) {
     },
 
     { Metric: 'Accept Game (Avg)', Value: result.acceptGameSeconds.toFixed(3) },
-    { Metric: 'Base Game Proof Create (Avg)', Value: avgCreateGame.toFixed(3) },
-    { Metric: 'Make Guess (Avg)', Value: avgMakeGuess.toFixed(3) },
-    { Metric: 'Solved', Value: result.isSolved },
     {
-      Metric: 'Submit Game Proof',
+      Metric: 'Base Game Proof Create',
+      Value: result.baseGameSeconds.toFixed(3),
+    },
+    { Metric: 'Make Guess (Avg)', Value: avgMakeGuess.toFixed(3) },
+    { Metric: 'Give Clue (Avg)', Value: avgGiveClue.toFixed(3) },
+    {
+      Metric: 'Make Guess Seconds',
+      Value: result.makeGuessSeconds.map((x) => x.toFixed(3)),
+    },
+    {
+      Metric: 'Give Clue Seconds',
+      Value: result.giveClueSeconds.map((x) => x.toFixed(3)),
+    },
+    {
+      Metric: 'Submit Game Proof (Avg)',
       Value: result.submitGameProofSeconds.toFixed(3),
     },
+    { Metric: 'Solved', Value: result.isSolved },
   ]);
 
   console.log('--------------------------------------');
@@ -274,17 +290,21 @@ async function main() {
     Combination.from([1, 2, 3, 4]),
   ];
 
-  // Step Length 3
-  await solveBenchmark([1, 2, 3, 4], steps.slice(12));
-  await solveBenchmark([4, 3, 2, 1], steps.slice(12));
+  // Step Length 1
+  await solveBenchmark([1, 2, 3, 4], steps.slice(6));
+  await solveBenchmark([4, 3, 2, 1], steps.slice(6));
 
-  // Step Length 4
-  await solveBenchmark([1, 2, 3, 4], steps.slice(11));
-  await solveBenchmark([4, 3, 2, 1], steps.slice(11));
+  // Step Length 3
+  await solveBenchmark([1, 2, 3, 4], steps.slice(4));
+  await solveBenchmark([4, 3, 2, 1], steps.slice(4));
 
   // Step Length 5
-  await solveBenchmark([1, 2, 3, 4], steps.slice(10));
-  await solveBenchmark([4, 3, 2, 1], steps.slice(10));
+  await solveBenchmark([1, 2, 3, 4], steps.slice(2));
+  await solveBenchmark([4, 3, 2, 1], steps.slice(2));
+
+  // Step Length 7
+  await solveBenchmark([1, 2, 3, 4], steps);
+  await solveBenchmark([4, 3, 2, 1], steps);
 
   console.log('Overall Benchmark Results for Solved Games');
   overallScores(benchmarkResults.filter((result) => result.isSolved));
@@ -485,6 +505,11 @@ async function solveBenchmark(secret: number[], steps: Combination[]) {
     end = performance.now();
     currentBenchmarkResults.giveClueSeconds.push((end - start) / 1000);
   }
+
+  log(
+    lastProof.publicOutput.codeBreakerId.toString(),
+    lastProof.publicOutput.codeMasterId.toString()
+  );
 
   start = performance.now();
   const submitGameProofTx = await Mina.transaction(

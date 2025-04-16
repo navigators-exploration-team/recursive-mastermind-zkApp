@@ -236,7 +236,7 @@ const functions = {
           state.secretCombination!,
           state.codeMasterSalt!,
           state.refereeKey!.toPublicKey(),
-          UInt64.from(10000)
+          UInt64.from(1e10)
         );
       }
     );
