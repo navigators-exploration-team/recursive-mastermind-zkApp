@@ -219,11 +219,11 @@ const functions = {
       }
       state.MastermindContract = MastermindZkApp;
     }
-    await state.MastermindContract.compile();
+    await state.MastermindContract.compile({ forceRecompile: true });
   },
   compileProgram: async () => {
     state.StepProgram = StepProgram;
-    await state.StepProgram.compile();
+    await state.StepProgram.compile({ forceRecompile: true });
   },
 
   deployAndInitializeContract: async () => {

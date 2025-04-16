@@ -263,14 +263,14 @@ async function main() {
   prettifyAnalyzers('zkApp', await MastermindZkApp.analyzeMethods());
 
   let compileStart = performance.now();
-  await StepProgram.compile();
+  await StepProgram.compile({ forceRecompile: true });
   let compileEnd = performance.now();
   console.log(
     `StepProgram compilation took ${(compileEnd - compileStart) / 1000} seconds`
   );
 
   compileStart = performance.now();
-  await MastermindZkApp.compile();
+  await MastermindZkApp.compile({ forceRecompile: true });
   compileEnd = performance.now();
   console.log(
     `MastermindZkApp compilation took ${
