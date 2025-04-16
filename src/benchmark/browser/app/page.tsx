@@ -1,7 +1,6 @@
 'use client';
 import { useEffect } from 'react';
 import WorkerClient from './worker/workerClient';
-import { Combination } from '../../../../build/src/utils';
 
 export default function Home() {
   useEffect(() => {
@@ -148,18 +147,19 @@ export default function Home() {
       );
 
       const steps = [
-        Combination.from([6, 3, 2, 1]),
-        Combination.from([3, 4, 5, 6]),
-        Combination.from([7, 4, 1, 6]),
-        Combination.from([2, 3, 4, 5]),
-        Combination.from([6, 7, 1, 2]),
-        Combination.from([5, 4, 3, 2]),
-        Combination.from([1, 2, 3, 4]),
+        [6, 3, 2, 1],
+        [3, 4, 5, 6],
+        [7, 4, 1, 6],
+        [2, 3, 4, 5],
+        [6, 7, 1, 2],
+        [5, 4, 3, 2],
+        [1, 2, 3, 4],
       ];
 
       const benchmarkResults: BenchmarkResults[] = [];
 
       updateProgress('Running benchmark for step length 1...');
+      console.log(steps.slice(6));
       let result = await workerClient.solveBenchmark({
         secretCombination: [1, 2, 3, 4],
         steps: steps.slice(6),
