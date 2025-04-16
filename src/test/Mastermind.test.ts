@@ -34,7 +34,7 @@ describe('Mastermind ZkApp Tests', () => {
   const localTest = testEnvironment === 'local';
   let fee = localTest ? 0 : 1e9;
   let proofsEnabled = false;
-  let REWARD_AMOUNT = 100000;
+  let REWARD_AMOUNT = 1e10;
   let MINA_NODE_ENDPOINT: string;
   let MINA_ARCHIVE_ENDPOINT: string;
   let MINA_EXPLORER: string;
@@ -571,16 +571,17 @@ describe('Mastermind ZkApp Tests', () => {
    */
   async function expectForfeitWinToFail(
     playerPubKey: PublicKey,
-    expectedMsg?: string
+    expectedMsg?: string,
+    senderKey: PrivateKey = refereeKey
   ) {
     try {
       const tx = await Mina.transaction(
-        { sender: refereeKey.toPublicKey(), fee },
+        { sender: senderKey.toPublicKey(), fee },
         async () => {
           await zkapp.forfeitWin(playerPubKey);
         }
       );
-      await waitTransactionAndFetchAccount(tx, [refereeKey]);
+      await waitTransactionAndFetchAccount(tx, [senderKey]);
     } catch (error: any) {
       log(error);
       expect(error.message).toContain(expectedMsg);
@@ -822,8 +823,9 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     describe('Reject invalid initGame calls', () => {
-      it('Reject initGame if reward amount is 0', async () => {
-        const expectedMsg = 'The reward amount must be greater than zero!';
+      it('Reject initGame if reward amount is less than 10 Mina: 0 Mina', async () => {
+        const expectedMsg =
+          'The reward amount must be greater than or equal to 10 MINA!';
         REWARD_AMOUNT = 0;
         await expectInitializeGameToFail(
           zkapp,
@@ -833,7 +835,21 @@ describe('Mastermind ZkApp Tests', () => {
           refereeKey,
           expectedMsg
         );
-        REWARD_AMOUNT = 100000;
+      });
+
+      it('Reject initGame if reward amount is less than 10 Mina: 9.999.. Mina', async () => {
+        const expectedMsg =
+          'The reward amount must be greater than or equal to 10 MINA!';
+        REWARD_AMOUNT = 999999999;
+        await expectInitializeGameToFail(
+          zkapp,
+          codeMasterKey,
+          secretCombination,
+          codeMasterSalt,
+          refereeKey,
+          expectedMsg
+        );
+        REWARD_AMOUNT = 1e10;
       });
 
       it('Reject initGame with invalid secret: first digit is 0', async () => {
@@ -1046,6 +1062,18 @@ describe('Mastermind ZkApp Tests', () => {
         REWARD_AMOUNT
       );
     });
+
+    it('Reject initializing the game again', async () => {
+      const expectedMsg = 'The game has already been initialized!';
+      await expectInitializeGameToFail(
+        zkapp,
+        codeMasterKey,
+        secretCombination,
+        codeMasterSalt,
+        refereeKey,
+        expectedMsg
+      );
+    });
   });
 
   describe('Accepting a Game and Solve', () => {
@@ -1199,6 +1227,16 @@ describe('Mastermind ZkApp Tests', () => {
     it('Claim reward successfully', async () => {
       await claimReward(codeBreakerPubKey, codeBreakerKey);
     });
+
+    it('Reject submitting after reward claim', async () => {
+      const expectedMsg =
+        'The game has already been finalized and the reward has been claimed!';
+      await expectProofSubmissionToFail(
+        completedProof,
+        codeBreakerPubKey,
+        expectedMsg
+      );
+    });
   });
 
   describe('codeMaster reimbursed reward', () => {
@@ -1273,6 +1311,12 @@ describe('Mastermind ZkApp Tests', () => {
     it('Claim reward', async () => {
       await claimReward(codeBreakerPubKey, codeBreakerKey);
     });
+
+    it('Reject forfeitWin method call after finalization', async () => {
+      const expectedMsg =
+        'There is no reward in the pool, the game is already finalized!';
+      await expectForfeitWinToFail(codeMasterPubKey, expectedMsg);
+    });
   });
 
   describe('Code Breaker punished for timeout', () => {
@@ -1280,9 +1324,38 @@ describe('Mastermind ZkApp Tests', () => {
       await prepareNewGame();
     });
 
+    it('Reject forfeitWin method call of intruder', async () => {
+      const expectedMsg = 'You are not the referee of this game!';
+      await expectForfeitWinToFail(codeBreakerPubKey, expectedMsg, intruderKey);
+    });
+
+    it('Reject forfeitWin method call of codeMaster', async () => {
+      const expectedMsg = 'You are not the referee of this game!';
+      await expectForfeitWinToFail(
+        codeBreakerPubKey,
+        expectedMsg,
+        codeMasterKey
+      );
+    });
+
+    it('Reject forfeitWin method call for random player', async () => {
+      const expectedMsg =
+        'The provided public key is not a player in this game!';
+      await expectForfeitWinToFail(
+        PrivateKey.random().toPublicKey(),
+        expectedMsg
+      );
+    });
+
     it('Penalty for codeBreaker', async () => {
       log('Penalty for codeBreaker');
       await forfeitWinForPlayer(refereeKey, codeMasterPubKey);
+    });
+
+    it('Reject forfeitWin method call again', async () => {
+      const expectedMsg =
+        'There is no reward in the pool, the game is already finalized!';
+      await expectForfeitWinToFail(codeBreakerPubKey, expectedMsg);
     });
   });
 
@@ -1294,6 +1367,12 @@ describe('Mastermind ZkApp Tests', () => {
     it('Penalty for codeMaster', async () => {
       log('Penalty for codeMaster');
       await forfeitWinForPlayer(refereeKey, codeBreakerPubKey);
+    });
+
+    it('Reject forfeitWin method call again', async () => {
+      const expectedMsg =
+        'There is no reward in the pool, the game is already finalized!';
+      await expectForfeitWinToFail(codeMasterPubKey, expectedMsg);
     });
   });
 
@@ -1664,6 +1743,100 @@ describe('Mastermind ZkApp Tests', () => {
         codeBreakerKey,
         expectedMsg
       );
+    });
+  });
+
+  describe('Submitting Invalid Game Proofs', () => {
+    beforeAll(async () => {
+      await prepareNewGame();
+    });
+
+    beforeEach(() => {
+      log(expect.getState().currentTestName);
+    });
+
+    it('Reject submitting a proof with intruder code breaker', async () => {
+      const proof = await generateTestProofs(
+        'codemaster-victory',
+        1,
+        codeMasterSalt,
+        secretCombination,
+        intruderKey,
+        codeMasterKey
+      );
+
+      const expectedMsg =
+        'The code breaker ID is not same as the one stored on-chain!';
+      await expectProofSubmissionToFail(proof, intruderPubKey, expectedMsg);
+    });
+
+    it('Reject submitting a proof with intruder code master', async () => {
+      const proof = await generateTestProofs(
+        'codebreaker-victory',
+        1,
+        codeMasterSalt,
+        secretCombination,
+        codeBreakerKey,
+        intruderKey
+      );
+
+      const expectedMsg =
+        'The code master ID is not same as the one stored on-chain!';
+      await expectProofSubmissionToFail(proof, intruderPubKey, expectedMsg);
+    });
+
+    it('Reject submitting a proof with wrong solution hash: wrong secret', async () => {
+      const proof = await generateTestProofs(
+        'codebreaker-victory',
+        1,
+        codeMasterSalt,
+        [3, 6, 2, 7],
+        codeBreakerKey,
+        codeMasterKey
+      );
+
+      const expectedMsg =
+        'The solution hash is not same as the one stored on-chain!';
+      await expectProofSubmissionToFail(proof, codeBreakerPubKey, expectedMsg);
+    });
+
+    it('Reject submitting a proof with wrong solution hash: wrong salt', async () => {
+      const proof = await generateTestProofs(
+        'codebreaker-victory',
+        1,
+        Field.random(),
+        secretCombination,
+        codeBreakerKey,
+        codeMasterKey
+      );
+
+      const expectedMsg =
+        'The solution hash is not same as the one stored on-chain!';
+      await expectProofSubmissionToFail(proof, codeBreakerPubKey, expectedMsg);
+    });
+
+    it('Submit a proof with 3rd round then try to submit another one with round 2', async () => {
+      let proof = await generateTestProofs(
+        'unsolved',
+        3,
+        codeMasterSalt,
+        secretCombination,
+        codeBreakerKey,
+        codeMasterKey
+      );
+
+      await submitGameProof(proof, codeBreakerPubKey, false);
+
+      const expectedMsg = 'Cannot submit a proof for a previous turn!';
+      proof = await generateTestProofs(
+        'unsolved',
+        2,
+        codeMasterSalt,
+        secretCombination,
+        codeBreakerKey,
+        codeMasterKey
+      );
+      await expectProofSubmissionToFail(proof, codeBreakerPubKey, expectedMsg);
     });
   });
 });
