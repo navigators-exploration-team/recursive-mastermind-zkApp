@@ -6,6 +6,9 @@ build/src/benchmarks
 build/src/test
 # Editor
 .vscode
+.prettierrc
+.prettierignore
+.gitattributes
 
 # System
 .DS_Store
@@ -16,6 +19,9 @@ keys
 node_modules
 coverage
 
+#images
+Mastermind.svg
+mastermind-board.webp
 
 
 .github
