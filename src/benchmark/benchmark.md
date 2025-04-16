@@ -37,10 +37,10 @@ This report summarizes the circuit analysis, compilation times, and per-step ben
 
 ### Compilation Times
 
-| Name          | NodeJS (Devnet) | Browser |
-| ------------- | --------------- | ------- |
-| StepProgram   | 23.27s          | 32.07s  |
-| MastermindApp | 12.26s          | 12.46s  |
+| Name          | NodeJS (Without cache) | Browser (Without cache) |
+| ------------- | ---------------------- | ----------------------- |
+| StepProgram   | 23.27s                 | 52.95s                  |
+| MastermindApp | 12.26s                 | 17.96s                  |
 
 ## Step-wise Benchmark Results (Local Mina Network)
 
@@ -71,8 +71,6 @@ This report summarizes the circuit analysis, compilation times, and per-step ben
 | 7           | false  | 283.949    | 0.333         | 0.245       | 15.369     | 19.083     | 19.175    | 0.197        |
 
 ## Overall Scores
-
-Based on the benchmark results, average taken from executed 62 steps ın both environments.
 
 ### NodeJS Environment
 
@@ -123,8 +121,6 @@ Based on the benchmark results, average taken from executed 62 steps ın both en
 | 5           | No     | 1609.57s   | 177.46s       | 357.79s     | 9.61s      | 12.59s     | 938.89s      |
 
 ## Overall Scores
-
-Based on the benchmark results, average taken from executed 62 steps ın both environments.
 
 ### NodeJS Environment
 
