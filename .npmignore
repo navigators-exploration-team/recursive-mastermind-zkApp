@@ -1,6 +1,9 @@
 # TypeScript files
 src
+benchmarks
 
+build/src/benchmarks
+build/src/test
 # Editor
 .vscode
 
@@ -12,5 +15,7 @@ keys
 
 node_modules
 coverage
+
+
 
 .github
