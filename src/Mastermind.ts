@@ -30,6 +30,7 @@ export {
 };
 
 class NewGameEvent extends Struct({
+  codemasterPubKey: PublicKey,
   rewardAmount: UInt64,
 }) {}
 
@@ -171,9 +172,9 @@ class MastermindZkApp extends SmartContract {
       'The reward amount must be greater than or equal to 10 MINA!'
     );
 
-    const sender = this.sender.getUnconstrained();
+    const codemasterPubKey = this.sender.getUnconstrained();
 
-    const codeMasterUpdate = AccountUpdate.createSigned(sender);
+    const codeMasterUpdate = AccountUpdate.createSigned(codemasterPubKey);
     codeMasterUpdate.send({ to: this.address, amount: rewardAmount });
 
     const gameState = new GameState({
@@ -184,13 +185,14 @@ class MastermindZkApp extends SmartContract {
     });
 
     this.solutionHash.set(Poseidon.hash([...secretCombination.digits, salt]));
-    this.codeMasterId.set(Poseidon.hash(sender.toFields()));
+    this.codeMasterId.set(Poseidon.hash(codemasterPubKey.toFields()));
     this.refereeId.set(Poseidon.hash(refereePubKey.toFields()));
     this.compressedState.set(gameState.pack());
 
     this.emitEvent(
       'newGame',
       new NewGameEvent({
+        codemasterPubKey,
         rewardAmount,
       })
     );
