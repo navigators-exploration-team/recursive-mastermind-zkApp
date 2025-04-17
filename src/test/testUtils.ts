@@ -6,6 +6,8 @@ export {
   StepProgramCreateGame,
   StepProgramGiveClue,
   StepProgramMakeGuess,
+  StepProgramMakeGuessInvalidSignature,
+  StepProgramGiveClueInvalidSignature,
   generateTestProofs,
   secretCombination,
   gameGuesses,
@@ -49,13 +51,44 @@ const StepProgramMakeGuess = async (
       authPubKey: codeBreakerKey.toPublicKey(),
       authSignature: Signature.create(codeBreakerKey, [
         ...guessCombination.digits,
-        Field.from(prevProof.publicOutput.turnCount.toBigInt()),
+        prevProof.publicOutput.turnCount.value,
       ]),
     },
     prevProof,
     guessCombination
   );
   return proof;
+};
+
+const StepProgramMakeGuessInvalidSignature = async (
+  prevProof: StepProgramProof,
+  guess: number[],
+  codeBreakerKey: PrivateKey,
+  config: {
+    wrongPubKey: boolean;
+    wrongMessage: boolean;
+    wrongSigner: boolean;
+  }
+): Promise<void> => {
+  const guessCombination = Combination.from(guess);
+  const randomKey = PrivateKey.random();
+  const authSignature = Signature.create(
+    config.wrongSigner ? randomKey : codeBreakerKey,
+    config.wrongMessage
+      ? Array.from({ length: 4 }, () => Field.random())
+      : [...guessCombination.digits, prevProof.publicOutput.turnCount.value]
+  );
+
+  await StepProgram.makeGuess(
+    {
+      authPubKey: config.wrongPubKey
+        ? randomKey.toPublicKey()
+        : codeBreakerKey.toPublicKey(),
+      authSignature,
+    },
+    prevProof,
+    guessCombination
+  );
 };
 
 /**
@@ -74,7 +107,7 @@ const StepProgramGiveClue = async (
       authSignature: Signature.create(codeMasterKey, [
         ...secretCombination.digits,
         salt,
-        Field.from(prevProof.publicOutput.turnCount.toBigInt()),
+        prevProof.publicOutput.turnCount.value,
       ]),
     },
     prevProof,
@@ -82,6 +115,43 @@ const StepProgramGiveClue = async (
     salt
   );
   return proof;
+};
+
+const StepProgramGiveClueInvalidSignature = async (
+  prevProof: StepProgramProof,
+  combination: number[],
+  salt: Field,
+  codeMasterKey: PrivateKey,
+  config: {
+    wrongPubKey: boolean;
+    wrongMessage: boolean;
+    wrongSigner: boolean;
+  }
+): Promise<void> => {
+  const secretCombination = Combination.from(combination);
+  const randomKey = PrivateKey.random();
+  const authSignature = Signature.create(
+    config.wrongSigner ? randomKey : codeMasterKey,
+    config.wrongMessage
+      ? Array.from({ length: 4 }, () => Field.random())
+      : [
+          ...secretCombination.digits,
+          salt,
+          prevProof.publicOutput.turnCount.value,
+        ]
+  );
+
+  await StepProgram.giveClue(
+    {
+      authPubKey: config.wrongPubKey
+        ? randomKey.toPublicKey()
+        : codeMasterKey.toPublicKey(),
+      authSignature,
+    },
+    prevProof,
+    secretCombination,
+    salt
+  );
 };
 
 /**

@@ -12,7 +12,6 @@ import {
 } from 'o1js';
 import { StepProgram } from '../../../../../build/src/stepProgram';
 import { MastermindZkApp } from '../../../../../build/src/Mastermind';
-
 import { Clue, Combination } from '../../../../../build/src/utils';
 import { players } from './mock';
 
@@ -30,7 +29,6 @@ const state = {
   zkappPrivateKey: null as PrivateKey | null,
   zkappAddress: null as PublicKey | null,
   zkapp: null as InstanceType<typeof MastermindZkApp> | null,
-  secretNumbers: null as number[] | null,
   secretCombination: null as Combination | null,
   benchmarkResults: null as BenchmarkResults | null,
 };
@@ -49,7 +47,11 @@ function log(...args: any[]) {
 }
 
 const functions = {
-  setActiveInstance: async ({ secretNumbers }: { secretNumbers: number[] }) => {
+  setActiveInstance: async ({
+    secretCombination,
+  }: {
+    secretCombination: number[];
+  }) => {
     let proofsEnabled = false;
     let MINA_NODE_ENDPOINT: string = '';
     let MINA_ARCHIVE_ENDPOINT: string = '';
@@ -68,8 +70,7 @@ const functions = {
     state.zkappAddress = state.zkappPrivateKey.toPublicKey();
     state.zkapp = new MastermindZkApp(state.zkappAddress);
     state.codeMasterSalt = Field.random();
-    state.secretNumbers = secretNumbers;
-    state.secretCombination = Combination.from(state.secretNumbers);
+    state.secretCombination = Combination.from(secretCombination);
 
     // @ts-ignore
     if (testEnvironment === 'local') {
@@ -218,11 +219,11 @@ const functions = {
       }
       state.MastermindContract = MastermindZkApp;
     }
-    await state.MastermindContract.compile();
+    await state.MastermindContract.compile({ forceRecompile: true });
   },
   compileProgram: async () => {
     state.StepProgram = StepProgram;
-    await state.StepProgram.compile();
+    await state.StepProgram.compile({ forceRecompile: true });
   },
 
   deployAndInitializeContract: async () => {
@@ -236,7 +237,7 @@ const functions = {
           state.secretCombination!,
           state.codeMasterSalt!,
           state.refereeKey!.toPublicKey(),
-          UInt64.from(10000)
+          UInt64.from(1e10)
         );
       }
     );
@@ -266,14 +267,14 @@ const functions = {
   },
 
   solveBenchmark: async ({
-    secretNumbers,
+    secretCombination,
     steps,
   }: {
-    secretNumbers: number[];
-    steps: Combination[];
+    secretCombination: number[];
+    steps: number[][];
   }) => {
-    console.log('Initiating Local Mina');
-    await functions.setActiveInstance({ secretNumbers });
+    const stepsCombinations = steps.map((step) => Combination.from(step));
+    await functions.setActiveInstance({ secretCombination });
     if (!state.benchmarkResults) {
       throw new Error('Benchmark results not initialized');
     }
@@ -307,7 +308,7 @@ const functions = {
     end = performance.now();
     state.benchmarkResults.baseGameSeconds = (end - start) / 1000;
 
-    for (const step of steps) {
+    for (const step of stepsCombinations) {
       console.log(`Processing step ${step.toString()}...`);
       start = performance.now();
       proof = (

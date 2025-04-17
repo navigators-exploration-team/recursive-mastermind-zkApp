@@ -1,5 +1,4 @@
 /* eslint-disable no-unused-vars */
-import { Combination } from '../../../../../build/src/utils.js';
 import type {
   ZkappWorkerRequest,
   ZkappWorkerReponse,
@@ -28,7 +27,7 @@ export default class WorkerClient {
     steps,
   }: {
     secretCombination: number[];
-    steps: Combination[];
+    steps: number[][];
   }): Promise<BenchmarkResults> {
     return this._call('solveBenchmark', {
       secretCombination,
