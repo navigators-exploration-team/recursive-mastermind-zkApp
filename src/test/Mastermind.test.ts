@@ -1839,4 +1839,153 @@ describe('Mastermind ZkApp Tests', () => {
       await expectProofSubmissionToFail(proof, codeBreakerPubKey, expectedMsg);
     });
   });
+
+  describe('Recovery if offchain recursion is not available', () => {
+    beforeAll(async () => {
+      secretCombination = [3, 1, 5, 2];
+      await prepareNewGame();
+      const proof = await generateTestProofs(
+        'unsolved',
+        5,
+        codeMasterSalt,
+        secretCombination,
+        codeBreakerKey,
+        codeMasterKey
+      );
+      await submitGameProof(proof, codeBreakerPubKey, false);
+    });
+
+    beforeEach(() => {
+      log(expect.getState().currentTestName);
+    });
+
+    it('Intruder tries to make guess and fails', async () => {
+      const guessCombination = Combination.from([2, 1, 3, 4]);
+      await expectMakeGuessToFail(
+        intruderPubKey,
+        intruderKey,
+        guessCombination,
+        'You are not the codeBreaker of this game!'
+      );
+    });
+
+    it('Code breaker should be able to continue game with makeGuess', async () => {
+      const currentGuessHistory = zkapp.packedGuessHistory.get();
+      const guessCombination = Combination.from([2, 1, 3, 4]);
+      await makeGuess(codeBreakerPubKey, codeBreakerKey, guessCombination);
+
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
+      expect(zkapp.packedGuessHistory.get()).toEqual(
+        Combination.updateHistory(
+          Combination.from([2, 1, 3, 4]),
+          currentGuessHistory,
+          Field(5)
+        )
+      );
+
+      expect(turnCount.toBigInt()).toEqual(12n);
+      expect(isSolved.toBoolean()).toEqual(false);
+    });
+
+    it('Intruder tries to give clue and fails', async () => {
+      const secretCombination = Combination.from([1, 2, 3, 4]);
+      await expectGiveClueToFail(
+        intruderPubKey,
+        intruderKey,
+        secretCombination,
+        codeMasterSalt,
+        'Only the codeMaster of this game is allowed to give clue!'
+      );
+    });
+
+    it('Code master should be able to continue game with giveClue', async () => {
+      const currentClueHistory = zkapp.packedClueHistory.get();
+      await giveClue(
+        codeMasterPubKey,
+        codeMasterKey,
+        Combination.from(secretCombination),
+        codeMasterSalt
+      );
+
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
+      expect(turnCount.toBigInt()).toEqual(13n);
+      expect(isSolved.toBoolean()).toEqual(false);
+      expect(zkapp.packedClueHistory.get()).toEqual(
+        Clue.updateHistory(
+          new Clue({
+            hits: Field(1),
+            blows: Field(2),
+          }),
+          currentClueHistory,
+          Field(5)
+        )
+      );
+    });
+
+    it('Code breaker should be able to continue game with makeGuess', async () => {
+      const currentGuessHistory = zkapp.packedGuessHistory.get();
+      const guessCombination = Combination.from([7, 1, 3, 4]);
+      await makeGuess(codeBreakerPubKey, codeBreakerKey, guessCombination);
+
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
+
+      expect(zkapp.packedGuessHistory.get()).toEqual(
+        Combination.updateHistory(
+          Combination.from([7, 1, 3, 4]),
+          currentGuessHistory,
+          Field(6)
+        )
+      );
+      expect(turnCount.toBigInt()).toEqual(14n);
+      expect(isSolved.toBoolean()).toEqual(false);
+      expect(zkapp.codeBreakerId.get()).toEqual(
+        Poseidon.hash(codeBreakerPubKey.toFields())
+      );
+    });
+
+    it('Code master should be able to continue game with giveClue and win', async () => {
+      const currentClueHistory = zkapp.packedClueHistory.get();
+      await giveClue(
+        codeMasterPubKey,
+        codeMasterKey,
+        Combination.from(secretCombination),
+        codeMasterSalt
+      );
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
+      expect(turnCount.toBigInt()).toEqual(15n);
+      expect(isSolved.toBoolean()).toEqual(false);
+      expect(zkapp.packedClueHistory.get()).toEqual(
+        Clue.updateHistory(
+          new Clue({
+            hits: Field(1),
+            blows: Field(1),
+          }),
+          currentClueHistory,
+          Field(6)
+        )
+      );
+    });
+
+    it('Code breaker should not be able to continue game with makeGuess', async () => {
+      const guessCombination = Combination.from([3, 1, 5, 2]);
+      await expectMakeGuessToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        guessCombination,
+        'You have reached the number limit of attempts to solve the secret combination!'
+      );
+    });
+
+    it('Code master should be able to claim reward', async () => {
+      await claimReward(codeMasterPubKey, codeMasterKey);
+    });
+  });
 });
