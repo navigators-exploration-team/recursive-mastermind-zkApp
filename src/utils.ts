@@ -198,22 +198,26 @@ class Clue extends Struct({
 class GameState extends Struct({
   rewardAmount: UInt64,
   finalizeSlot: UInt32,
+  lastPlayedSlot: UInt32,
   turnCount: UInt8,
   isSolved: Bool,
 }) {
   static default = new this({
     rewardAmount: UInt64.from(1e9),
     finalizeSlot: UInt32.from(0),
+    lastPlayedSlot: UInt32.from(0),
     turnCount: UInt8.from(0),
     isSolved: Bool(false),
   });
 
   pack() {
-    const { rewardAmount, finalizeSlot, turnCount, isSolved } = this;
+    const { rewardAmount, finalizeSlot, lastPlayedSlot, turnCount, isSolved } =
+      this;
 
     const serializedState = [
       rewardAmount.toBits(),
       finalizeSlot.toBits(),
+      lastPlayedSlot.toBits(),
       turnCount.toBits(),
       isSolved.toField().toBits(1),
     ].flat();
@@ -226,12 +230,14 @@ class GameState extends Struct({
 
     const rewardAmount = UInt64.fromBits(bits.slice(0, 64));
     const finalizeSlot = UInt32.fromBits(bits.slice(64, 96));
-    const turnCount = UInt8.fromBits(bits.slice(96, 104));
-    const isSolved = bits[104];
+    const lastPlayedSlot = UInt32.fromBits(bits.slice(96, 128));
+    const turnCount = UInt8.fromBits(bits.slice(128, 136));
+    const isSolved = bits[136];
 
     return new this({
       rewardAmount,
       finalizeSlot,
+      lastPlayedSlot,
       turnCount,
       isSolved,
     });

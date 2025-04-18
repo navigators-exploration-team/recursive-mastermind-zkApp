@@ -179,8 +179,9 @@ class MastermindZkApp extends SmartContract {
 
     const gameState = new GameState({
       rewardAmount,
-      finalizeSlot: UInt32.zero,
+      finalizeSlot: UInt32.from(0),
       turnCount: UInt8.from(1),
+      lastPlayedSlot: UInt32.from(0),
       isSolved: Bool(false),
     });
 
@@ -239,6 +240,7 @@ class MastermindZkApp extends SmartContract {
     const gameState = new GameState({
       rewardAmount: rewardAmount.add(rewardAmount),
       finalizeSlot,
+      lastPlayedSlot: UInt32.from(0),
       turnCount,
       isSolved: Bool(false),
     });
@@ -328,6 +330,7 @@ class MastermindZkApp extends SmartContract {
       rewardAmount: Provable.if(shouldSendReward, UInt64.zero, rewardAmount),
       finalizeSlot: Provable.if(shouldSendReward, UInt32.zero, finalizeSlot),
       turnCount: proof.publicOutput.turnCount,
+      lastPlayedSlot: UInt32.from(0),
       isSolved,
     });
 
@@ -395,6 +398,7 @@ class MastermindZkApp extends SmartContract {
     const gameState = new GameState({
       rewardAmount: UInt64.zero,
       finalizeSlot: UInt32.zero,
+      lastPlayedSlot: UInt32.from(0),
       turnCount,
       isSolved,
     });
@@ -451,6 +455,7 @@ class MastermindZkApp extends SmartContract {
     const gameState = new GameState({
       rewardAmount: UInt64.zero,
       finalizeSlot,
+      lastPlayedSlot: UInt32.from(0),
       turnCount,
       isSolved,
     });
@@ -504,6 +509,8 @@ class MastermindZkApp extends SmartContract {
     );
 
     this.packedGuessHistory.set(packedGuessHistory);
+
+    // Todo
 
     const gameState = new GameState({
       rewardAmount,
