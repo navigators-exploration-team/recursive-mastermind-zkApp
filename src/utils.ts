@@ -69,7 +69,7 @@ class Combination extends Struct({
     }
   }
 
-  private static decompressHistory(compressedHistory: Field) {
+  static decompressHistory(compressedHistory: Field) {
     const historyBits = compressedHistory.toBits(12 * MAX_ATTEMPTS);
     const historyBitPacks: Bool[][] = [];
 
@@ -189,6 +189,7 @@ class Clue extends Struct({
  * `GameState` is a class that represents the state of the game.
  *  @param rewardAmount - The total reward amount for the game.
  *  @param finalizeSlot - The slot at which the game is finalized.
+ *  @param lastPlayedSlot - The slot at which the last move was made.
  *  @param turnCount - The number of turns taken in the game.
  *  @param isSolved - A flag indicating whether the game is solved or not.
  *
