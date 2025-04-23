@@ -599,6 +599,37 @@ describe('Mastermind ZkApp Tests', () => {
     return latestBlock.globalSlotSinceGenesis.toBigint();
   }
 
+  async function fetchSlotNumber() {
+    if (localTest) {
+      return Mina.getNetworkState().globalSlotSinceGenesis.toBigint();
+    } else {
+      const latestBlock = await fetchLastBlock(MINA_NODE_ENDPOINT);
+      return latestBlock.globalSlotSinceGenesis.toBigint();
+    }
+  }
+
+  /**
+   * Helper function to wait for a specific slot length.
+   */
+  async function waitFor(slotLength: number) {
+    if (localTest) {
+      // Move the global slot forward
+      Local.incrementGlobalSlot(slotLength);
+      return;
+    } else {
+      while (true) {
+        let currentSlot = await getGlobalSlot();
+        if (currentSlot >= BigInt(slotLength)) {
+          break;
+        }
+
+        // Wait for 3 min
+        await new Promise((resolve) => setTimeout(resolve, 3 * 60 * 1000));
+        await fetchLastBlock(MINA_NODE_ENDPOINT);
+      }
+    }
+  }
+
   /**
    * Helper function to wait for SLOT_DURATION.
    */
@@ -1671,8 +1702,9 @@ describe('Mastermind ZkApp Tests', () => {
 
       await submitGameProof(unsolvedProof, codeBreakerPubKey, false);
 
-      const { turnCount, lastPlayedSlot, finalizeSlot, isSolved } =
-        GameState.unpack(zkapp.compressedState.get());
+      const { turnCount, finalizeSlot, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
 
       expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
       expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
@@ -1683,14 +1715,6 @@ describe('Mastermind ZkApp Tests', () => {
       expect(
         Mina.getNetworkState().globalSlotSinceGenesis.toBigint()
       ).toBeLessThan(finalizeSlot.toBigint());
-      console.log(
-        'Current global slot: ',
-        Mina.getNetworkState().globalSlotSinceGenesis.toBigint(),
-        'Finalization slot: ',
-        finalizeSlot.toBigint(),
-        'Last played slot: ',
-        lastPlayedSlot.toBigint()
-      );
 
       await expectClaimRewardToFail(
         codeMasterPubKey,
@@ -1800,9 +1824,73 @@ describe('Mastermind ZkApp Tests', () => {
   });
 
   describe('Recovery if offchain recursion is not available', () => {
+    let slotNumber: bigint;
     beforeAll(async () => {
+      if (testEnvironment === 'local') {
+        Local.setGlobalSlot(0);
+      }
       secretCombination = [3, 1, 5, 2];
       await prepareNewGame();
+      slotNumber = await fetchSlotNumber();
+    });
+
+    beforeEach(() => {
+      log(expect.getState().currentTestName);
+    });
+
+    it('Code breaker should be able to start game with makeGuess', async () => {
+      const guessCombination = Combination.from([2, 1, 3, 4]);
+      await makeGuess(codeBreakerPubKey, codeBreakerKey, guessCombination);
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
+      expect(turnCount.toBigInt()).toEqual(2n);
+      expect(isSolved.toBoolean()).toEqual(false);
+      expect(zkapp.packedGuessHistory.get()).toEqual(
+        Combination.updateHistory(
+          Combination.from([2, 1, 3, 4]),
+          Field(0),
+          Field(0)
+        )
+      );
+      expect(zkapp.codeBreakerId.get()).toEqual(
+        Poseidon.hash(codeBreakerPubKey.toFields())
+      );
+      expect(zkapp.packedClueHistory.get()).toEqual(Field(0));
+    });
+
+    it('Code master should be able to continue game with stepProgramProof with 3rd round', async () => {
+      const proof = await generateTestProofs(
+        'unsolved',
+        3,
+        codeMasterSalt,
+        secretCombination,
+        codeBreakerKey,
+        codeMasterKey
+      );
+      await submitGameProof(proof, codeMasterPubKey, false);
+      slotNumber = await fetchSlotNumber();
+      const { turnCount, lastPlayedSlot, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
+      expect(turnCount.toBigInt()).toEqual(7n);
+      expect(isSolved.toBoolean()).toEqual(false);
+      expect(lastPlayedSlot.toBigint()).toEqual(slotNumber);
+    });
+
+    it('Code master wait more than PER_ATTEMPT_GAME_DURATION and rejected to make guess onchain', async () => {
+      await waitFor(PER_ATTEMPT_GAME_DURATION + 1);
+
+      const guessCombination = Combination.from([5, 1, 7, 2]);
+      await expectMakeGuessToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        guessCombination,
+        'You have passed the time limit to make a guess!'
+      );
+    });
+
+    it('Settle stepProgramProof with unsolved game', async () => {
       const proof = await generateTestProofs(
         'unsolved',
         5,
@@ -1812,10 +1900,13 @@ describe('Mastermind ZkApp Tests', () => {
         codeMasterKey
       );
       await submitGameProof(proof, codeBreakerPubKey, false);
-    });
-
-    beforeEach(() => {
-      log(expect.getState().currentTestName);
+      slotNumber = await fetchSlotNumber();
+      const { turnCount, lastPlayedSlot, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
+      expect(turnCount.toBigInt()).toEqual(11n);
+      expect(isSolved.toBoolean()).toEqual(false);
+      expect(lastPlayedSlot.toBigint()).toEqual(slotNumber);
     });
 
     it('Intruder tries to make guess and fails', async () => {
