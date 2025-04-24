@@ -18,7 +18,7 @@ import {
 
 import { Combination, Clue, GameState } from './utils.js';
 import { StepProgramProof } from './stepProgram.js';
-import { MAX_ATTEMPTS, PER_ATTEMPT_GAME_DURATION } from './constants.js';
+import { MAX_ATTEMPTS, PER_TURN_GAME_DURATION } from './constants.js';
 
 export {
   NewGameEvent,
@@ -230,7 +230,9 @@ class MastermindZkApp extends SmartContract {
     );
 
     const finalizeSlot = currentSlot.add(
-      UInt32.from(MAX_ATTEMPTS).mul(PER_ATTEMPT_GAME_DURATION)
+      UInt32.from(MAX_ATTEMPTS * 2)
+        .mul(PER_TURN_GAME_DURATION)
+        .add(1)
     );
 
     const gameState = new GameState({
@@ -512,7 +514,7 @@ class MastermindZkApp extends SmartContract {
       );
 
     lastPlayedSlot
-      .add(PER_ATTEMPT_GAME_DURATION)
+      .add(PER_TURN_GAME_DURATION)
       .assertGreaterThanOrEqual(
         currentSlot,
         'You have passed the time limit to make a guess!'
@@ -576,7 +578,7 @@ class MastermindZkApp extends SmartContract {
       );
 
     lastPlayedSlot
-      .add(PER_ATTEMPT_GAME_DURATION)
+      .add(PER_TURN_GAME_DURATION)
       .assertGreaterThanOrEqual(
         currentSlot,
         'You have passed the time limit to make a guess!'

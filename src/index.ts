@@ -1,4 +1,4 @@
-import { PER_ATTEMPT_GAME_DURATION, MAX_ATTEMPTS } from './constants.js';
+import { PER_TURN_GAME_DURATION, MAX_ATTEMPTS } from './constants.js';
 import {
   MastermindZkApp,
   NewGameEvent,
@@ -17,7 +17,7 @@ import { Combination, Clue, GameState } from './utils.js';
 
 export {
   MastermindZkApp,
-  PER_ATTEMPT_GAME_DURATION,
+  PER_TURN_GAME_DURATION,
   MAX_ATTEMPTS,
   NewGameEvent,
   GameAcceptEvent,
