@@ -24,7 +24,11 @@ describe('utility.ts unit tests', () => {
     describe('derive Combination from random numbers', () => {
       it('should create a valid Combination from an array of 4 digits in [1..7]', () => {
         const randomNumbers = generateRandomCombinationNumbers(4);
+        const expected = new Combination({
+          digits: randomNumbers.map(Field),
+        });
         expect(() => Combination.from(randomNumbers)).not.toThrow();
+        expect(Combination.from(randomNumbers)).toEqual(expected);
       });
       it('should throw an error if the array length is greater than 4', () => {
         const randomNumbers = generateRandomCombinationNumbers(5);
@@ -167,7 +171,6 @@ describe('utility.ts unit tests', () => {
           ...Field(0).toBits().slice(12),
         ]);
       });
-
       it('should compress the combination correctly for [5, 6, 7, 1]', () => {
         const combination = Combination.from([5, 6, 7, 1]);
         const compressed = combination.compress();
@@ -211,6 +214,22 @@ describe('utility.ts unit tests', () => {
           ...Field(5).toBits(3),
           ...Field(0).toBits().slice(12),
         ]);
+      });
+      it('should throw an error if a digit is greater than 7', () => {
+        const combination = new Combination({
+          digits: [1, 2, 3, 8].map(Field),
+        });
+        expect(() => combination.compress()).toThrow(
+          'Field.toBits(): 8 does not fit in 3 bits'
+        );
+      });
+      it('should throw an error if a digit is greater than 7', () => {
+        const combination = new Combination({
+          digits: [Field(7), Field(14), Field(3), Field(8)],
+        });
+        expect(() => combination.compress()).toThrow(
+          'Field.toBits(): 14 does not fit in 3 bits'
+        );
       });
     });
 
@@ -304,7 +323,7 @@ describe('utility.ts unit tests', () => {
 
       it('should throw an error for a combination with duplicate digits', () => {
         const combination = new Combination({
-          digits: [Field(1), Field(2), Field(3), Field(1)],
+          digits: [1, 2, 3, 1].map(Field),
         });
         expect(() => combination.validate()).toThrow(
           'Combination digit 4 is not unique!'
@@ -313,14 +332,14 @@ describe('utility.ts unit tests', () => {
 
       it('should throw an error for a combination with digits out of range', () => {
         const combination = new Combination({
-          digits: [Field(1), Field(2), Field(3), Field(8)],
+          digits: [1, 2, 3, 8].map(Field),
         });
         expect(() => combination.validate()).toThrow(
           'Combination digit 4 is not in range [1, 7]!'
         );
 
         const combination2 = new Combination({
-          digits: [Field(1), Field(2), Field(3), Field(9)],
+          digits: [1, 2, 3, 9].map(Field),
         });
         expect(() => combination2.validate()).toThrow(
           'Combination digit 4 is not in range [1, 7]!'
@@ -329,14 +348,14 @@ describe('utility.ts unit tests', () => {
 
       it('should throw an error for a combination with digits below range', () => {
         const combination = new Combination({
-          digits: [Field(1), Field(0), Field(3), Field(4)],
+          digits: [1, 0, 3, 4].map(Field),
         });
         expect(() => combination.validate()).toThrow(
           'Combination digit 2 is not in range [1, 7]!'
         );
 
         const combination2 = new Combination({
-          digits: [Field(0), Field(2), Field(3), Field(4)],
+          digits: [0, 2, 3, 4].map(Field),
         });
         expect(() => combination2.validate()).toThrow(
           'Combination digit 1 is not in range [1, 7]!'
@@ -345,7 +364,7 @@ describe('utility.ts unit tests', () => {
 
       it('should throw an error for a combination with digits out of range and duplicates', () => {
         const combination = new Combination({
-          digits: [Field(1), Field(1), Field(3), Field(8)],
+          digits: [1, 1, 3, 8].map(Field),
         });
         expect(() => combination.validate()).toThrow(
           'Combination digit 4 is not in range [1, 7]!'
@@ -354,7 +373,7 @@ describe('utility.ts unit tests', () => {
 
       it('should throw an error for a combination with digits out of range and duplicates', () => {
         const combination = new Combination({
-          digits: [Field(1), Field(2), Field(2), Field(8)],
+          digits: [1, 2, 2, 8].map(Field),
         });
         expect(() => combination.validate()).toThrow(
           'Combination digit 4 is not in range [1, 7]!'
@@ -616,34 +635,62 @@ describe('utility.ts unit tests', () => {
 
     describe('giveClue() method', () => {
       it('should give the correct clue for guess=[1, 2, 3, 4] and solution=[1, 2, 3, 4]', () => {
-        const guess = [Field(1), Field(2), Field(3), Field(4)];
-        const solution = [Field(1), Field(2), Field(3), Field(4)];
+        const guess = [1, 2, 3, 4].map(Field);
+        const solution = [1, 2, 3, 4].map(Field);
         const clue = Clue.giveClue(guess, solution);
         expect(clue.hits).toEqual(Field(4));
         expect(clue.blows).toEqual(Field(0));
       });
-
       it('should give the correct clue for guess=[1, 2, 3, 4] and solution=[4, 3, 2, 1]', () => {
-        const guess = [Field(1), Field(2), Field(3), Field(4)];
-        const solution = [Field(4), Field(3), Field(2), Field(1)];
+        const guess = [1, 2, 3, 4].map(Field);
+        const solution = [4, 3, 2, 1].map(Field);
         const clue = Clue.giveClue(guess, solution);
         expect(clue.hits).toEqual(Field(0));
         expect(clue.blows).toEqual(Field(4));
       });
-
       it('should give the correct clue for guess=[1, 2, 3, 4] and solution=[1, 3, 2, 4]', () => {
-        const guess = [Field(1), Field(2), Field(3), Field(4)];
-        const solution = [Field(1), Field(3), Field(2), Field(4)];
+        const guess = [1, 2, 3, 4].map(Field);
+        const solution = [1, 3, 2, 4].map(Field);
         const clue = Clue.giveClue(guess, solution);
         expect(clue.hits).toEqual(Field(2));
         expect(clue.blows).toEqual(Field(2));
       });
       it('should give the correct clue for guess=[1, 2, 3, 4] and solution=[2, 1, 4, 3]', () => {
-        const guess = [Field(1), Field(2), Field(3), Field(4)];
-        const solution = [Field(2), Field(1), Field(4), Field(3)];
+        const guess = [1, 2, 3, 4].map(Field);
+        const solution = [2, 1, 4, 3].map(Field);
         const clue = Clue.giveClue(guess, solution);
         expect(clue.hits).toEqual(Field(0));
         expect(clue.blows).toEqual(Field(4));
+      });
+      it('should give the correct clue for guess=[4, 7, 6, 1] and solution=[2, 1, 4, 3]', () => {
+        const guess = [4, 7, 6, 1].map(Field);
+        const solution = [2, 1, 4, 3].map(Field);
+        const clue = Clue.giveClue(guess, solution);
+        expect(clue.hits).toEqual(Field(0));
+        expect(clue.blows).toEqual(Field(2));
+      });
+      it('should give the correct clue for guess=[3, 2, 6, 7] and solution=[2, 5, 3, 1]', () => {
+        const guess = [3, 2, 6, 7].map(Field);
+        const solution = [2, 5, 3, 1].map(Field);
+        const clue = Clue.giveClue(guess, solution);
+        expect(clue.hits).toEqual(Field(0));
+        expect(clue.blows).toEqual(Field(2));
+      });
+
+      it('should give the correct clue for guess=[4, 2, 1, 7] and solution=[4, 5, 1, 3]', () => {
+        const guess = [4, 2, 1, 7].map(Field);
+        const solution = [4, 5, 1, 3].map(Field);
+        const clue = Clue.giveClue(guess, solution);
+        expect(clue.hits).toEqual(Field(2));
+        expect(clue.blows).toEqual(Field(0));
+      });
+
+      it('should give the correct clue for guess=[5, 3, 1, 6] and solution=[4, 5, 1, 6]', () => {
+        const guess = [5, 3, 1, 6].map(Field);
+        const solution = [4, 5, 1, 6].map(Field);
+        const clue = Clue.giveClue(guess, solution);
+        expect(clue.hits).toEqual(Field(2));
+        expect(clue.blows).toEqual(Field(1));
       });
     });
 
@@ -710,6 +757,7 @@ describe('utility.ts unit tests', () => {
         expect(gameState).toBeInstanceOf(GameState);
         expect(gameState.rewardAmount).toEqual(UInt64.from(1e9));
         expect(gameState.finalizeSlot).toEqual(UInt32.from(0));
+        expect(gameState.lastPlayedSlot).toEqual(UInt32.from(0));
         expect(gameState.turnCount).toEqual(UInt8.from(0));
         expect(gameState.isSolved).toEqual(Bool(false));
       });
@@ -718,12 +766,14 @@ describe('utility.ts unit tests', () => {
         const gameState = new GameState({
           rewardAmount: UInt64.from(2e9),
           finalizeSlot: UInt32.from(1),
+          lastPlayedSlot: UInt32.from(5),
           turnCount: UInt8.from(2),
           isSolved: Bool(true),
         });
         expect(gameState).toBeInstanceOf(GameState);
         expect(gameState.rewardAmount).toEqual(UInt64.from(2e9));
         expect(gameState.finalizeSlot).toEqual(UInt32.from(1));
+        expect(gameState.lastPlayedSlot).toEqual(UInt32.from(5));
         expect(gameState.turnCount).toEqual(UInt8.from(2));
         expect(gameState.isSolved).toEqual(Bool(true));
       });
@@ -734,6 +784,7 @@ describe('utility.ts unit tests', () => {
         const gameState = new GameState({
           rewardAmount: UInt64.from(2287634827),
           finalizeSlot: UInt32.from(715237),
+          lastPlayedSlot: UInt32.from(64521),
           turnCount: UInt8.from(72),
           isSolved: Bool(true),
         });
@@ -742,6 +793,7 @@ describe('utility.ts unit tests', () => {
           Field.fromBits([
             ...UInt64.from(2287634827).toBits(),
             ...UInt32.from(715237).toBits(),
+            ...UInt32.from(64521).toBits(),
             ...UInt8.from(72).toBits(),
             Bool(true),
           ])
@@ -755,6 +807,7 @@ describe('utility.ts unit tests', () => {
           Field.fromBits([
             ...UInt64.from(1e9).toBits(),
             ...UInt32.from(0).toBits(),
+            ...UInt32.from(0).toBits(),
             ...UInt8.from(0).toBits(),
             Bool(false),
           ])
@@ -765,6 +818,7 @@ describe('utility.ts unit tests', () => {
         const gameState = new GameState({
           rewardAmount: UInt64.from(2e9),
           finalizeSlot: UInt32.from(1),
+          lastPlayedSlot: UInt32.from(8),
           turnCount: UInt8.from(2),
           isSolved: Bool(true),
         });
@@ -773,6 +827,7 @@ describe('utility.ts unit tests', () => {
           Field.fromBits([
             ...UInt64.from(2e9).toBits(),
             ...UInt32.from(1).toBits(),
+            ...UInt32.from(8).toBits(),
             ...UInt8.from(2).toBits(),
             Bool(true),
           ])
@@ -783,6 +838,7 @@ describe('utility.ts unit tests', () => {
         const gameState = new GameState({
           rewardAmount: UInt64.from(2n ** 64n - 1n),
           finalizeSlot: UInt32.from(2n ** 32n - 1n),
+          lastPlayedSlot: UInt32.from(2n ** 32n - 1n),
           turnCount: UInt8.from(255),
           isSolved: Bool(true),
         });
@@ -790,6 +846,7 @@ describe('utility.ts unit tests', () => {
         expect(packed).toEqual(
           Field.fromBits([
             ...UInt64.from(2n ** 64n - 1n).toBits(),
+            ...UInt32.from(2n ** 32n - 1n).toBits(),
             ...UInt32.from(2n ** 32n - 1n).toBits(),
             ...UInt8.from(255).toBits(),
             Bool(true),
@@ -803,6 +860,7 @@ describe('utility.ts unit tests', () => {
         const packed = Field.fromBits([
           ...UInt64.from(2e9).toBits(),
           ...UInt32.from(1).toBits(),
+          ...UInt32.from(8).toBits(),
           ...UInt8.from(2).toBits(),
           Bool(true),
         ]);
@@ -810,6 +868,7 @@ describe('utility.ts unit tests', () => {
         expect(gameState).toBeInstanceOf(GameState);
         expect(gameState.rewardAmount).toEqual(UInt64.from(2e9));
         expect(gameState.finalizeSlot).toEqual(UInt32.from(1));
+        expect(gameState.lastPlayedSlot).toEqual(UInt32.from(8));
         expect(gameState.turnCount).toEqual(UInt8.from(2));
         expect(gameState.isSolved).toEqual(Bool(true));
       });
@@ -818,6 +877,7 @@ describe('utility.ts unit tests', () => {
         const packed = Field.fromBits([
           ...UInt64.from(1e9).toBits(),
           ...UInt32.from(0).toBits(),
+          ...UInt32.from(0).toBits(),
           ...UInt8.from(0).toBits(),
           Bool(false),
         ]);
@@ -825,6 +885,7 @@ describe('utility.ts unit tests', () => {
         expect(gameState).toBeInstanceOf(GameState);
         expect(gameState.rewardAmount).toEqual(UInt64.from(1e9));
         expect(gameState.finalizeSlot).toEqual(UInt32.from(0));
+        expect(gameState.lastPlayedSlot).toEqual(UInt32.from(0));
         expect(gameState.turnCount).toEqual(UInt8.from(0));
         expect(gameState.isSolved).toEqual(Bool(false));
       });
@@ -833,6 +894,7 @@ describe('utility.ts unit tests', () => {
         const packed = Field.fromBits([
           ...UInt64.from(3e9).toBits(),
           ...UInt32.from(109).toBits(),
+          ...UInt32.from(64521).toBits(),
           ...UInt8.from(5).toBits(),
           Bool(true),
         ]);
@@ -840,6 +902,7 @@ describe('utility.ts unit tests', () => {
         expect(gameState).toBeInstanceOf(GameState);
         expect(gameState.rewardAmount).toEqual(UInt64.from(3e9));
         expect(gameState.finalizeSlot).toEqual(UInt32.from(109));
+        expect(gameState.lastPlayedSlot).toEqual(UInt32.from(64521));
         expect(gameState.turnCount).toEqual(UInt8.from(5));
         expect(gameState.isSolved).toEqual(Bool(true));
       });
@@ -848,6 +911,7 @@ describe('utility.ts unit tests', () => {
         const packed = Field.fromBits([
           ...UInt64.from(2n ** 64n - 1n).toBits(),
           ...UInt32.from(2n ** 32n - 1n).toBits(),
+          ...UInt32.from(2n ** 32n - 1n).toBits(),
           ...UInt8.from(255).toBits(),
           Bool(true),
         ]);
@@ -855,6 +919,7 @@ describe('utility.ts unit tests', () => {
         expect(gameState).toBeInstanceOf(GameState);
         expect(gameState.rewardAmount).toEqual(UInt64.from(2n ** 64n - 1n));
         expect(gameState.finalizeSlot).toEqual(UInt32.from(2n ** 32n - 1n));
+        expect(gameState.lastPlayedSlot).toEqual(UInt32.from(2n ** 32n - 1n));
         expect(gameState.turnCount).toEqual(UInt8.from(255));
         expect(gameState.isSolved).toEqual(Bool(true));
       });

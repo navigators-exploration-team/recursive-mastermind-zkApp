@@ -382,7 +382,7 @@ src/
 
   - **`testUtils.test.ts`**: Contains unit tests for the functions in `testUtils.ts`, ensuring each logic component works correctly before integration into the zkApp. This helps catch issues early and improves overall reliability.
 
-- **`constants.ts`**: Contains constants used in the zkApp, such as `MAX_ATTEMPT`, and `PER_ATTEMPT_GAME_DURATION` which are essential for maintaining the game rules and logic.
+- **`constants.ts`**: Contains constants used in the zkApp, such as `MAX_ATTEMPT`, and `PER_TURN_GAME_DURATION` which are essential for maintaining the game rules and logic.
 
 - **`index.ts`**: Serves as the entry point, importing and exporting all essential smart contract classes for the zkApp(s).
 

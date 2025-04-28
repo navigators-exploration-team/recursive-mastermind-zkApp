@@ -107,17 +107,6 @@ const StepProgram = ZkProgram({
           .isEven()
           .assertFalse('Please wait for the codeMaster to give you a clue!');
 
-        authInputs.authSignature
-          .verify(authInputs.authPubKey, [
-            ...guessCombination.digits,
-            turnCount,
-          ])
-          .assertTrue('You are not the codeBreaker of this game!');
-
-        Clue.decompress(previousClue.publicOutput.lastcompressedClue)
-          .isSolved()
-          .assertFalse('You have already solved the secret combination!');
-
         const computedCodebreakerId = Poseidon.hash(
           authInputs.authPubKey.toFields()
         );
@@ -126,6 +115,17 @@ const StepProgram = ZkProgram({
           .equals(computedCodebreakerId)
           .or(turnCount.equals(1))
           .assertTrue('You are not the codeBreaker of this game!');
+
+        authInputs.authSignature
+          .verify(authInputs.authPubKey, [
+            ...guessCombination.digits,
+            turnCount,
+          ])
+          .assertTrue('Invalid signature!');
+
+        Clue.decompress(previousClue.publicOutput.lastcompressedClue)
+          .isSolved()
+          .assertFalse('You have already solved the secret combination!');
 
         const packedGuessHistory = Combination.updateHistory(
           guessCombination,
@@ -172,16 +172,6 @@ const StepProgram = ZkProgram({
           .and(turnCount.equals(0).not())
           .assertTrue('Please wait for the codeBreaker to make a guess!');
 
-        authInputs.authSignature
-          .verify(authInputs.authPubKey, [
-            ...secretCombination.digits,
-            salt,
-            turnCount,
-          ])
-          .assertTrue(
-            'Only the codeMaster of this game is allowed to give clue!'
-          );
-
         previousGuess.publicOutput.codeMasterId.assertEquals(
           Poseidon.hash(authInputs.authPubKey.toFields()),
           'Only the codeMaster of this game is allowed to give clue!'
@@ -191,6 +181,14 @@ const StepProgram = ZkProgram({
           Poseidon.hash([...secretCombination.digits, salt]),
           'The secret combination is not compliant with the initial hash from game creation!'
         );
+
+        authInputs.authSignature
+          .verify(authInputs.authPubKey, [
+            ...secretCombination.digits,
+            salt,
+            turnCount,
+          ])
+          .assertTrue('Invalid signature!');
 
         const lastGuess = Combination.decompress(
           previousGuess.publicOutput.lastCompressedGuess
