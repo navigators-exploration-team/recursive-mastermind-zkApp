@@ -757,6 +757,7 @@ describe('utility.ts unit tests', () => {
         expect(gameState).toBeInstanceOf(GameState);
         expect(gameState.rewardAmount).toEqual(UInt64.from(1e9));
         expect(gameState.finalizeSlot).toEqual(UInt32.from(0));
+        expect(gameState.lastPlayedSlot).toEqual(UInt32.from(0));
         expect(gameState.turnCount).toEqual(UInt8.from(0));
         expect(gameState.isSolved).toEqual(Bool(false));
       });
@@ -765,12 +766,14 @@ describe('utility.ts unit tests', () => {
         const gameState = new GameState({
           rewardAmount: UInt64.from(2e9),
           finalizeSlot: UInt32.from(1),
+          lastPlayedSlot: UInt32.from(5),
           turnCount: UInt8.from(2),
           isSolved: Bool(true),
         });
         expect(gameState).toBeInstanceOf(GameState);
         expect(gameState.rewardAmount).toEqual(UInt64.from(2e9));
         expect(gameState.finalizeSlot).toEqual(UInt32.from(1));
+        expect(gameState.lastPlayedSlot).toEqual(UInt32.from(5));
         expect(gameState.turnCount).toEqual(UInt8.from(2));
         expect(gameState.isSolved).toEqual(Bool(true));
       });
@@ -781,6 +784,7 @@ describe('utility.ts unit tests', () => {
         const gameState = new GameState({
           rewardAmount: UInt64.from(2287634827),
           finalizeSlot: UInt32.from(715237),
+          lastPlayedSlot: UInt32.from(64521),
           turnCount: UInt8.from(72),
           isSolved: Bool(true),
         });
@@ -789,6 +793,7 @@ describe('utility.ts unit tests', () => {
           Field.fromBits([
             ...UInt64.from(2287634827).toBits(),
             ...UInt32.from(715237).toBits(),
+            ...UInt32.from(64521).toBits(),
             ...UInt8.from(72).toBits(),
             Bool(true),
           ])
@@ -802,6 +807,7 @@ describe('utility.ts unit tests', () => {
           Field.fromBits([
             ...UInt64.from(1e9).toBits(),
             ...UInt32.from(0).toBits(),
+            ...UInt32.from(0).toBits(),
             ...UInt8.from(0).toBits(),
             Bool(false),
           ])
@@ -812,6 +818,7 @@ describe('utility.ts unit tests', () => {
         const gameState = new GameState({
           rewardAmount: UInt64.from(2e9),
           finalizeSlot: UInt32.from(1),
+          lastPlayedSlot: UInt32.from(8),
           turnCount: UInt8.from(2),
           isSolved: Bool(true),
         });
@@ -820,6 +827,7 @@ describe('utility.ts unit tests', () => {
           Field.fromBits([
             ...UInt64.from(2e9).toBits(),
             ...UInt32.from(1).toBits(),
+            ...UInt32.from(8).toBits(),
             ...UInt8.from(2).toBits(),
             Bool(true),
           ])
@@ -830,6 +838,7 @@ describe('utility.ts unit tests', () => {
         const gameState = new GameState({
           rewardAmount: UInt64.from(2n ** 64n - 1n),
           finalizeSlot: UInt32.from(2n ** 32n - 1n),
+          lastPlayedSlot: UInt32.from(2n ** 32n - 1n),
           turnCount: UInt8.from(255),
           isSolved: Bool(true),
         });
@@ -837,6 +846,7 @@ describe('utility.ts unit tests', () => {
         expect(packed).toEqual(
           Field.fromBits([
             ...UInt64.from(2n ** 64n - 1n).toBits(),
+            ...UInt32.from(2n ** 32n - 1n).toBits(),
             ...UInt32.from(2n ** 32n - 1n).toBits(),
             ...UInt8.from(255).toBits(),
             Bool(true),
@@ -850,6 +860,7 @@ describe('utility.ts unit tests', () => {
         const packed = Field.fromBits([
           ...UInt64.from(2e9).toBits(),
           ...UInt32.from(1).toBits(),
+          ...UInt32.from(8).toBits(),
           ...UInt8.from(2).toBits(),
           Bool(true),
         ]);
@@ -857,6 +868,7 @@ describe('utility.ts unit tests', () => {
         expect(gameState).toBeInstanceOf(GameState);
         expect(gameState.rewardAmount).toEqual(UInt64.from(2e9));
         expect(gameState.finalizeSlot).toEqual(UInt32.from(1));
+        expect(gameState.lastPlayedSlot).toEqual(UInt32.from(8));
         expect(gameState.turnCount).toEqual(UInt8.from(2));
         expect(gameState.isSolved).toEqual(Bool(true));
       });
@@ -865,6 +877,7 @@ describe('utility.ts unit tests', () => {
         const packed = Field.fromBits([
           ...UInt64.from(1e9).toBits(),
           ...UInt32.from(0).toBits(),
+          ...UInt32.from(0).toBits(),
           ...UInt8.from(0).toBits(),
           Bool(false),
         ]);
@@ -872,6 +885,7 @@ describe('utility.ts unit tests', () => {
         expect(gameState).toBeInstanceOf(GameState);
         expect(gameState.rewardAmount).toEqual(UInt64.from(1e9));
         expect(gameState.finalizeSlot).toEqual(UInt32.from(0));
+        expect(gameState.lastPlayedSlot).toEqual(UInt32.from(0));
         expect(gameState.turnCount).toEqual(UInt8.from(0));
         expect(gameState.isSolved).toEqual(Bool(false));
       });
@@ -880,6 +894,7 @@ describe('utility.ts unit tests', () => {
         const packed = Field.fromBits([
           ...UInt64.from(3e9).toBits(),
           ...UInt32.from(109).toBits(),
+          ...UInt32.from(64521).toBits(),
           ...UInt8.from(5).toBits(),
           Bool(true),
         ]);
@@ -887,6 +902,7 @@ describe('utility.ts unit tests', () => {
         expect(gameState).toBeInstanceOf(GameState);
         expect(gameState.rewardAmount).toEqual(UInt64.from(3e9));
         expect(gameState.finalizeSlot).toEqual(UInt32.from(109));
+        expect(gameState.lastPlayedSlot).toEqual(UInt32.from(64521));
         expect(gameState.turnCount).toEqual(UInt8.from(5));
         expect(gameState.isSolved).toEqual(Bool(true));
       });
@@ -895,6 +911,7 @@ describe('utility.ts unit tests', () => {
         const packed = Field.fromBits([
           ...UInt64.from(2n ** 64n - 1n).toBits(),
           ...UInt32.from(2n ** 32n - 1n).toBits(),
+          ...UInt32.from(2n ** 32n - 1n).toBits(),
           ...UInt8.from(255).toBits(),
           Bool(true),
         ]);
@@ -902,6 +919,7 @@ describe('utility.ts unit tests', () => {
         expect(gameState).toBeInstanceOf(GameState);
         expect(gameState.rewardAmount).toEqual(UInt64.from(2n ** 64n - 1n));
         expect(gameState.finalizeSlot).toEqual(UInt32.from(2n ** 32n - 1n));
+        expect(gameState.lastPlayedSlot).toEqual(UInt32.from(2n ** 32n - 1n));
         expect(gameState.turnCount).toEqual(UInt8.from(255));
         expect(gameState.isSolved).toEqual(Bool(true));
       });

@@ -18,7 +18,7 @@ import {
 
 import { Combination, Clue, GameState } from './utils.js';
 import { StepProgramProof } from './stepProgram.js';
-import { MAX_ATTEMPTS, PER_ATTEMPT_GAME_DURATION } from './constants.js';
+import { MAX_ATTEMPTS, PER_TURN_GAME_DURATION } from './constants.js';
 
 export {
   NewGameEvent,
@@ -119,12 +119,8 @@ class MastermindZkApp extends SmartContract {
       .or(codeBreakerId.equals(Field.from(0)))
       .assertFalse('The game has not been accepted by the codeBreaker yet!');
 
-    const currentSlot = this.network.globalSlotSinceGenesis.get();
-    // extend network precondition in case of skipped slots
-    this.network.globalSlotSinceGenesis.requireBetween(
-      currentSlot,
-      finalizeSlot.sub(UInt32.from(1))
-    );
+    const currentSlot =
+      this.network.globalSlotSinceGenesis.getAndRequireEquals();
 
     currentSlot.assertLessThan(
       finalizeSlot,
@@ -133,7 +129,7 @@ class MastermindZkApp extends SmartContract {
 
     isSolved.assertFalse('The game secret has already been solved!');
 
-    return finalizeSlot;
+    return currentSlot;
   }
 
   async deploy() {
@@ -179,8 +175,9 @@ class MastermindZkApp extends SmartContract {
 
     const gameState = new GameState({
       rewardAmount,
-      finalizeSlot: UInt32.zero,
+      finalizeSlot: UInt32.from(0),
       turnCount: UInt8.from(1),
+      lastPlayedSlot: UInt32.from(0),
       isSolved: Bool(false),
     });
 
@@ -233,12 +230,15 @@ class MastermindZkApp extends SmartContract {
     );
 
     const finalizeSlot = currentSlot.add(
-      UInt32.from(MAX_ATTEMPTS).mul(PER_ATTEMPT_GAME_DURATION)
+      UInt32.from(MAX_ATTEMPTS * 2)
+        .mul(PER_TURN_GAME_DURATION)
+        .add(1)
     );
 
     const gameState = new GameState({
       rewardAmount: rewardAmount.add(rewardAmount),
       finalizeSlot,
+      lastPlayedSlot: UInt32.from(0),
       turnCount,
       isSolved: Bool(false),
     });
@@ -271,11 +271,14 @@ class MastermindZkApp extends SmartContract {
 
     const codeMasterId = this.codeMasterId.getAndRequireEquals();
     const codeBreakerId = this.codeBreakerId.getAndRequireEquals();
-    let { finalizeSlot, rewardAmount, turnCount, isSolved } = GameState.unpack(
+    let { rewardAmount, finalizeSlot, turnCount, isSolved } = GameState.unpack(
       this.compressedState.getAndRequireEquals()
     );
 
-    await this.assertNotFinalized(finalizeSlot, isSolved);
+    const lastPlayedSlot = await this.assertNotFinalized(
+      finalizeSlot,
+      isSolved
+    );
 
     proof.publicOutput.codeBreakerId.assertEquals(
       codeBreakerId,
@@ -328,6 +331,7 @@ class MastermindZkApp extends SmartContract {
       rewardAmount: Provable.if(shouldSendReward, UInt64.zero, rewardAmount),
       finalizeSlot: Provable.if(shouldSendReward, UInt32.zero, finalizeSlot),
       turnCount: proof.publicOutput.turnCount,
+      lastPlayedSlot,
       isSolved,
     });
 
@@ -350,24 +354,33 @@ class MastermindZkApp extends SmartContract {
    * @throws If the game has not been finalized yet, or if the caller is not the winner.
    */
   @method async claimReward() {
-    let { rewardAmount, finalizeSlot, turnCount, isSolved } = GameState.unpack(
-      this.compressedState.getAndRequireEquals()
-    );
+    let { rewardAmount, finalizeSlot, lastPlayedSlot, turnCount, isSolved } =
+      GameState.unpack(this.compressedState.getAndRequireEquals());
 
-    const currentSlot =
-      this.network.globalSlotSinceGenesis.getAndRequireEquals();
-    let isFinalized = currentSlot.greaterThanOrEqual(finalizeSlot);
+    let isFinalized = this.network.globalSlotSinceGenesis
+      .getAndRequireEquals()
+      .greaterThanOrEqual(finalizeSlot);
 
     const claimer = this.sender.getAndRequireSignature();
+    const claimerId = Poseidon.hash(claimer.toFields());
 
     const codeMasterId = this.codeMasterId.getAndRequireEquals();
-    const computedCodeMasterId = Poseidon.hash(claimer.toFields());
-
     const codeBreakerId = this.codeBreakerId.getAndRequireEquals();
-    const computedCodebreakerId = Poseidon.hash(claimer.toFields());
 
-    const isCodeMaster = codeMasterId.equals(computedCodeMasterId);
-    const isCodeBreaker = codeBreakerId.equals(computedCodebreakerId);
+    const isCodeMaster = codeMasterId.equals(claimerId);
+    const isCodeBreaker = codeBreakerId.equals(claimerId);
+
+    const isCodeMasterLeft = turnCount
+      .lessThan(MAX_ATTEMPTS * 2)
+      .and(turnCount.value.isEven())
+      .and(isFinalized)
+      .and(isSolved.not()); // maybe redundant
+
+    const isCodeBreakerLeft = turnCount
+      .lessThan(MAX_ATTEMPTS * 2)
+      .and(turnCount.value.isOdd())
+      .and(isFinalized)
+      .and(isSolved.not());
 
     // Code Master wins if the game is finalized and the codeBreaker has not solved the secret combination yet
     // Also if game is not accepted by the codeBreaker yet, the finalize slot is remains 0
@@ -385,8 +398,12 @@ class MastermindZkApp extends SmartContract {
       .assertTrue('You are not the codeMaster or codeBreaker of this game!');
 
     const isWinner = isCodeMaster
-      .and(codeMasterWinByFinalize.or(codeMasterWinByMaxAttempts))
-      .or(isCodeBreaker.and(codeBreakerWin));
+      .and(
+        codeMasterWinByFinalize
+          .or(codeMasterWinByMaxAttempts)
+          .or(isCodeBreakerLeft)
+      )
+      .or(isCodeBreaker.and(codeBreakerWin.or(isCodeMasterLeft)));
 
     isWinner.assertTrue('You are not the winner of this game!');
 
@@ -395,6 +412,7 @@ class MastermindZkApp extends SmartContract {
     const gameState = new GameState({
       rewardAmount: UInt64.zero,
       finalizeSlot: UInt32.zero,
+      lastPlayedSlot,
       turnCount,
       isSolved,
     });
@@ -451,6 +469,7 @@ class MastermindZkApp extends SmartContract {
     const gameState = new GameState({
       rewardAmount: UInt64.zero,
       finalizeSlot,
+      lastPlayedSlot: UInt32.from(0),
       turnCount,
       isSolved,
     });
@@ -472,11 +491,10 @@ class MastermindZkApp extends SmartContract {
    * @throws If the game has already been solved, or if the guess is not valid.
    */
   @method async makeGuess(guessCombination: Combination) {
-    let { rewardAmount, finalizeSlot, turnCount, isSolved } = GameState.unpack(
-      this.compressedState.getAndRequireEquals()
-    );
+    let { rewardAmount, finalizeSlot, lastPlayedSlot, turnCount, isSolved } =
+      GameState.unpack(this.compressedState.getAndRequireEquals());
 
-    await this.assertNotFinalized(finalizeSlot, isSolved);
+    const currentSlot = await this.assertNotFinalized(finalizeSlot, isSolved);
 
     turnCount.value
       .isEven()
@@ -495,6 +513,13 @@ class MastermindZkApp extends SmartContract {
         'You are not the codeBreaker of this game!'
       );
 
+    lastPlayedSlot
+      .add(PER_TURN_GAME_DURATION)
+      .assertGreaterThanOrEqual(
+        currentSlot,
+        'You have passed the time limit to make a guess!'
+      );
+
     guessCombination.validate();
 
     const packedGuessHistory = Combination.updateHistory(
@@ -509,6 +534,7 @@ class MastermindZkApp extends SmartContract {
       rewardAmount,
       finalizeSlot,
       turnCount: turnCount.add(1),
+      lastPlayedSlot: currentSlot,
       isSolved,
     });
 
@@ -523,11 +549,10 @@ class MastermindZkApp extends SmartContract {
    * @throws If the game has already been solved, or given secret combination and salt are not valid.
    */
   @method async giveClue(secretCombination: Combination, salt: Field) {
-    let { rewardAmount, finalizeSlot, turnCount, isSolved } = GameState.unpack(
-      this.compressedState.getAndRequireEquals()
-    );
+    let { rewardAmount, finalizeSlot, lastPlayedSlot, turnCount, isSolved } =
+      GameState.unpack(this.compressedState.getAndRequireEquals());
 
-    await this.assertNotFinalized(finalizeSlot, isSolved);
+    const currentSlot = await this.assertNotFinalized(finalizeSlot, isSolved);
 
     this.codeMasterId
       .getAndRequireEquals()
@@ -552,6 +577,13 @@ class MastermindZkApp extends SmartContract {
         'The secret combination is not compliant with the stored hash on-chain!'
       );
 
+    lastPlayedSlot
+      .add(PER_TURN_GAME_DURATION)
+      .assertGreaterThanOrEqual(
+        currentSlot,
+        'You have passed the time limit to make a guess!'
+      );
+
     const lastGuess = Combination.getElementFromHistory(
       this.packedGuessHistory.getAndRequireEquals(),
       turnCount.div(2).sub(1).value
@@ -571,6 +603,7 @@ class MastermindZkApp extends SmartContract {
       rewardAmount,
       finalizeSlot,
       turnCount: turnCount.add(1),
+      lastPlayedSlot: currentSlot,
       isSolved,
     });
 

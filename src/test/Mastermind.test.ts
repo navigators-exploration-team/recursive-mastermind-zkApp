@@ -25,7 +25,7 @@ import {
   StepProgramMakeGuess,
 } from './testUtils';
 import { players } from './mock';
-import { MAX_ATTEMPTS, PER_ATTEMPT_GAME_DURATION } from '../constants';
+import { PER_TURN_GAME_DURATION } from '../constants';
 
 describe('Mastermind ZkApp Tests', () => {
   // Global variables
@@ -599,14 +599,48 @@ describe('Mastermind ZkApp Tests', () => {
     return latestBlock.globalSlotSinceGenesis.toBigint();
   }
 
+  async function fetchSlotNumber() {
+    if (localTest) {
+      return Mina.getNetworkState().globalSlotSinceGenesis.toBigint();
+    } else {
+      const latestBlock = await fetchLastBlock(MINA_NODE_ENDPOINT);
+      return latestBlock.globalSlotSinceGenesis.toBigint();
+    }
+  }
+
+  /**
+   * Helper function to wait for a specific slot length.
+   */
+  async function waitFor(slotLength: number) {
+    if (localTest) {
+      // Move the global slot forward
+      const before = await fetchSlotNumber();
+      Local.incrementGlobalSlot(slotLength);
+      const after = await fetchSlotNumber();
+      log(`Global slot moved from ${before} to ${after}`);
+      return;
+    } else {
+      while (true) {
+        let currentSlot = await getGlobalSlot();
+        if (currentSlot >= BigInt(slotLength)) {
+          break;
+        }
+
+        // Wait for 3 min
+        await new Promise((resolve) => setTimeout(resolve, 3 * 60 * 1000));
+        await fetchLastBlock(MINA_NODE_ENDPOINT);
+      }
+    }
+  }
+
   /**
    * Helper function to wait for SLOT_DURATION.
    */
   async function waitForFinalize() {
     if (localTest) {
       // Move the global slot forward
-
-      Local.incrementGlobalSlot(MAX_ATTEMPTS * PER_ATTEMPT_GAME_DURATION);
+      const { finalizeSlot } = GameState.unpack(zkapp.compressedState.get());
+      Local.setGlobalSlot(finalizeSlot);
     } else {
       // Wait for the game duration
       await fetchAccount({ publicKey: zkappAddress });
@@ -1653,7 +1687,7 @@ describe('Mastermind ZkApp Tests', () => {
       );
     });
 
-    it('Should generate a proof with randomly chosen actions for unsolved game and fail to settle.', async () => {
+    it('Should generate a proof with randomly chosen actions for unsolved game.', async () => {
       const rounds = 3;
       const expectedMsg = 'You are not the winner of this game!';
       const winnerFlag = 'unsolved';
@@ -1671,7 +1705,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       await submitGameProof(unsolvedProof, codeBreakerPubKey, false);
 
-      const { turnCount, isSolved } = GameState.unpack(
+      const { turnCount, finalizeSlot, isSolved } = GameState.unpack(
         zkapp.compressedState.get()
       );
 
@@ -1681,57 +1715,9 @@ describe('Mastermind ZkApp Tests', () => {
       expect(zkapp.codeBreakerId.get()).toEqual(
         Poseidon.hash(codeBreakerPubKey.toFields())
       );
-
-      await expectClaimRewardToFail(
-        codeMasterPubKey,
-        codeMasterKey,
-        expectedMsg
-      );
-      await expectClaimRewardToFail(
-        codeBreakerPubKey,
-        codeBreakerKey,
-        expectedMsg
-      );
-    });
-
-    it('Should generate a proof with predefined actions for unsolved game and fail to settle.', async () => {
-      const rounds = 3;
-      const expectedMsg = 'You are not the winner of this game!';
-      const winnerFlag = 'unsolved';
-
-      const unsolvedProof = await generateTestProofs(
-        winnerFlag,
-        rounds,
-        codeMasterSalt,
-        secretCombination,
-        codeBreakerKey,
-        codeMasterKey,
-        gameGuesses
-      );
-
-      const publicOutputs = unsolvedProof.publicOutput;
-
-      await submitGameProof(unsolvedProof, codeBreakerPubKey, false);
-
-      const { turnCount, isSolved } = GameState.unpack(
-        zkapp.compressedState.get()
-      );
-
-      const attemptList = gameGuesses.totalAttempts.slice(0, rounds);
-      const separatedHistory = Array.from({ length: rounds }, (_, i) =>
-        Combination.getElementFromHistory(
-          zkapp.packedGuessHistory.get(),
-          Field(i)
-        ).digits.map(Number)
-      );
-
-      expect(separatedHistory).toEqual(attemptList);
-      expect(publicOutputs.solutionHash).toEqual(zkapp.solutionHash.get());
-      expect(turnCount.toBigInt()).toEqual(publicOutputs.turnCount.toBigInt());
-      expect(isSolved.toBoolean()).toEqual(false);
-      expect(zkapp.codeBreakerId.get()).toEqual(
-        Poseidon.hash(codeBreakerPubKey.toFields())
-      );
+      expect(
+        Mina.getNetworkState().globalSlotSinceGenesis.toBigint()
+      ).toBeLessThan(finalizeSlot.toBigint());
 
       await expectClaimRewardToFail(
         codeMasterPubKey,
@@ -1841,9 +1827,72 @@ describe('Mastermind ZkApp Tests', () => {
   });
 
   describe('Recovery if offchain recursion is not available', () => {
+    let slotNumber: bigint;
     beforeAll(async () => {
+      if (testEnvironment === 'local') {
+        Local.setGlobalSlot(0);
+      }
       secretCombination = [3, 1, 5, 2];
       await prepareNewGame();
+      slotNumber = await fetchSlotNumber();
+    });
+
+    beforeEach(() => {
+      log(expect.getState().currentTestName);
+    });
+
+    it('Code breaker should be able to start game with makeGuess', async () => {
+      const guessCombination = Combination.from([2, 1, 3, 4]);
+      await makeGuess(codeBreakerPubKey, codeBreakerKey, guessCombination);
+      const { turnCount, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
+      expect(turnCount.toBigInt()).toEqual(2n);
+      expect(isSolved.toBoolean()).toEqual(false);
+      expect(zkapp.packedGuessHistory.get()).toEqual(
+        Combination.updateHistory(
+          Combination.from([2, 1, 3, 4]),
+          Field(0),
+          Field(0)
+        )
+      );
+      expect(zkapp.codeBreakerId.get()).toEqual(
+        Poseidon.hash(codeBreakerPubKey.toFields())
+      );
+      expect(zkapp.packedClueHistory.get()).toEqual(Field(0));
+    });
+
+    it('Code master should be able to continue game with stepProgramProof with 3rd round', async () => {
+      const proof = await generateTestProofs(
+        'unsolved',
+        3,
+        codeMasterSalt,
+        secretCombination,
+        codeBreakerKey,
+        codeMasterKey
+      );
+      await submitGameProof(proof, codeMasterPubKey, false);
+      slotNumber = await fetchSlotNumber();
+      const { turnCount, lastPlayedSlot, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
+      expect(turnCount.toBigInt()).toEqual(7n);
+      expect(isSolved.toBoolean()).toEqual(false);
+      expect(lastPlayedSlot.toBigint()).toEqual(slotNumber);
+    });
+
+    it('Code master wait more than PER_TURN_GAME_DURATION and rejected to make guess onchain', async () => {
+      await waitFor(PER_TURN_GAME_DURATION + 1);
+      const guessCombination = Combination.from([5, 1, 7, 2]);
+      await expectMakeGuessToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        guessCombination,
+        'You have passed the time limit to make a guess!'
+      );
+    });
+
+    it('Settle stepProgramProof with unsolved game', async () => {
       const proof = await generateTestProofs(
         'unsolved',
         5,
@@ -1853,10 +1902,13 @@ describe('Mastermind ZkApp Tests', () => {
         codeMasterKey
       );
       await submitGameProof(proof, codeBreakerPubKey, false);
-    });
-
-    beforeEach(() => {
-      log(expect.getState().currentTestName);
+      slotNumber = await fetchSlotNumber();
+      const { turnCount, lastPlayedSlot, isSolved } = GameState.unpack(
+        zkapp.compressedState.get()
+      );
+      expect(turnCount.toBigInt()).toEqual(11n);
+      expect(isSolved.toBoolean()).toEqual(false);
+      expect(lastPlayedSlot.toBigint()).toEqual(slotNumber);
     });
 
     it('Intruder tries to make guess and fails', async () => {
@@ -1986,6 +2038,178 @@ describe('Mastermind ZkApp Tests', () => {
 
     it('Code master should be able to claim reward', async () => {
       await claimReward(codeMasterPubKey, codeMasterKey);
+    });
+  });
+
+  describe('Play it totally onchain with maximum duration', () => {
+    beforeAll(async () => {
+      if (testEnvironment === 'local') {
+        Local.setGlobalSlot(0);
+      }
+      secretCombination = [1, 2, 3, 4];
+      await prepareNewGame();
+    });
+
+    beforeEach(() => {
+      log(expect.getState().currentTestName);
+    });
+
+    it('Turn 1', async () => {
+      const guessCombination = Combination.from([4, 1, 2, 3]);
+      await waitFor(PER_TURN_GAME_DURATION);
+      await makeGuess(codeBreakerPubKey, codeBreakerKey, guessCombination);
+
+      expect(
+        GameState.unpack(zkapp.compressedState.get()).turnCount.toBigInt()
+      ).toEqual(2n);
+
+      await waitFor(PER_TURN_GAME_DURATION);
+      await giveClue(
+        codeMasterPubKey,
+        codeMasterKey,
+        Combination.from(secretCombination),
+        codeMasterSalt
+      );
+
+      expect(
+        GameState.unpack(zkapp.compressedState.get()).turnCount.toBigInt()
+      ).toEqual(3n);
+    });
+
+    it('Turn 2', async () => {
+      const guessCombination = Combination.from([3, 1, 6, 4]);
+      await waitFor(PER_TURN_GAME_DURATION);
+      await makeGuess(codeBreakerPubKey, codeBreakerKey, guessCombination);
+
+      expect(
+        GameState.unpack(zkapp.compressedState.get()).turnCount.toBigInt()
+      ).toEqual(4n);
+
+      await waitFor(PER_TURN_GAME_DURATION);
+      await giveClue(
+        codeMasterPubKey,
+        codeMasterKey,
+        Combination.from(secretCombination),
+        codeMasterSalt
+      );
+
+      expect(
+        GameState.unpack(zkapp.compressedState.get()).turnCount.toBigInt()
+      ).toEqual(5n);
+    });
+
+    it('Turn 3', async () => {
+      const guessCombination = Combination.from([1, 5, 6, 2]);
+      await waitFor(PER_TURN_GAME_DURATION);
+      await makeGuess(codeBreakerPubKey, codeBreakerKey, guessCombination);
+
+      expect(
+        GameState.unpack(zkapp.compressedState.get()).turnCount.toBigInt()
+      ).toEqual(6n);
+
+      await waitFor(PER_TURN_GAME_DURATION);
+      await giveClue(
+        codeMasterPubKey,
+        codeMasterKey,
+        Combination.from(secretCombination),
+        codeMasterSalt
+      );
+
+      expect(
+        GameState.unpack(zkapp.compressedState.get()).turnCount.toBigInt()
+      ).toEqual(7n);
+    });
+
+    it('Turn 4', async () => {
+      const guessCombination = Combination.from([7, 1, 3, 4]);
+      await waitFor(PER_TURN_GAME_DURATION);
+      await makeGuess(codeBreakerPubKey, codeBreakerKey, guessCombination);
+
+      expect(
+        GameState.unpack(zkapp.compressedState.get()).turnCount.toBigInt()
+      ).toEqual(8n);
+
+      await waitFor(PER_TURN_GAME_DURATION);
+      await giveClue(
+        codeMasterPubKey,
+        codeMasterKey,
+        Combination.from(secretCombination),
+        codeMasterSalt
+      );
+
+      expect(
+        GameState.unpack(zkapp.compressedState.get()).turnCount.toBigInt()
+      ).toEqual(9n);
+    });
+
+    it('Turn 5', async () => {
+      const guessCombination = Combination.from([4, 2, 5, 1]);
+      await waitFor(PER_TURN_GAME_DURATION);
+      await makeGuess(codeBreakerPubKey, codeBreakerKey, guessCombination);
+
+      expect(
+        GameState.unpack(zkapp.compressedState.get()).turnCount.toBigInt()
+      ).toEqual(10n);
+
+      await waitFor(PER_TURN_GAME_DURATION);
+      await giveClue(
+        codeMasterPubKey,
+        codeMasterKey,
+        Combination.from(secretCombination),
+        codeMasterSalt
+      );
+
+      expect(
+        GameState.unpack(zkapp.compressedState.get()).turnCount.toBigInt()
+      ).toEqual(11n);
+    });
+
+    it('Turn 6', async () => {
+      const guessCombination = Combination.from([7, 5, 2, 4]);
+      await waitFor(PER_TURN_GAME_DURATION);
+      await makeGuess(codeBreakerPubKey, codeBreakerKey, guessCombination);
+
+      expect(
+        GameState.unpack(zkapp.compressedState.get()).turnCount.toBigInt()
+      ).toEqual(12n);
+
+      await waitFor(PER_TURN_GAME_DURATION);
+      await giveClue(
+        codeMasterPubKey,
+        codeMasterKey,
+        Combination.from(secretCombination),
+        codeMasterSalt
+      );
+
+      expect(
+        GameState.unpack(zkapp.compressedState.get()).turnCount.toBigInt()
+      ).toEqual(13n);
+    });
+
+    it('Turn 7', async () => {
+      const guessCombination = Combination.from([1, 2, 3, 4]);
+      await waitFor(PER_TURN_GAME_DURATION);
+      await makeGuess(codeBreakerPubKey, codeBreakerKey, guessCombination);
+
+      expect(
+        GameState.unpack(zkapp.compressedState.get()).turnCount.toBigInt()
+      ).toEqual(14n);
+
+      await waitFor(PER_TURN_GAME_DURATION);
+      await giveClue(
+        codeMasterPubKey,
+        codeMasterKey,
+        Combination.from(secretCombination),
+        codeMasterSalt
+      );
+
+      expect(
+        GameState.unpack(zkapp.compressedState.get()).turnCount.toBigInt()
+      ).toEqual(15n);
+    });
+
+    it('Claim reward', async () => {
+      await claimReward(codeBreakerPubKey, codeBreakerKey);
     });
   });
 });
