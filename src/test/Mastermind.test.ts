@@ -840,7 +840,7 @@ describe('Mastermind ZkApp Tests', () => {
       it('Reject initGame if reward amount is less than 10 Mina: 9.999.. Mina', async () => {
         const expectedMsg =
           'The reward amount must be greater than or equal to 10 MINA!';
-        REWARD_AMOUNT = 999999999;
+        REWARD_AMOUNT = 1e10 - 1;
         await expectInitializeGameToFail(
           zkapp,
           codeMasterKey,

@@ -23,7 +23,7 @@ class Combination extends Struct({
       throw new Error('Combination must have exactly 4 digits');
     }
     const combination = new this({
-      digits: numbers.map((number) => Field(number)),
+      digits: numbers.map(Field),
     });
 
     combination.validate();
