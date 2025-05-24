@@ -60,6 +60,7 @@ class MastermindZkApp extends SmartContract {
    * - `finalizeSlot`: The slot at which the game will be finalized.
    * - `turnCount`: The current turn count of the game.
    * - `isSolved`: A boolean indicating whether the game has been solved or not.
+   * - `lastPlayedSlot`: The slot number at which the most recent move in the game was played.
    */
   @state(Field) compressedState = State<Field>();
 
@@ -114,13 +115,15 @@ class MastermindZkApp extends SmartContract {
         'The game has already been finalized and the reward has been claimed!'
       );
 
-    finalizeSlot
-      .equals(UInt32.zero)
-      .or(codeBreakerId.equals(Field.from(0)))
+    codeBreakerId
+      .equals(Field.from(0))
       .assertFalse('The game has not been accepted by the codeBreaker yet!');
 
-    const currentSlot =
-      this.network.globalSlotSinceGenesis.getAndRequireEquals();
+    const currentSlot = this.network.globalSlotSinceGenesis.get();
+    this.network.globalSlotSinceGenesis.requireBetween(
+      currentSlot,
+      currentSlot.add(UInt32.from(1))
+    );
 
     currentSlot.assertLessThan(
       finalizeSlot,
@@ -238,7 +241,7 @@ class MastermindZkApp extends SmartContract {
     const gameState = new GameState({
       rewardAmount: rewardAmount.add(rewardAmount),
       finalizeSlot,
-      lastPlayedSlot: UInt32.from(0),
+      lastPlayedSlot: currentSlot,
       turnCount,
       isSolved: Bool(false),
     });
@@ -297,7 +300,7 @@ class MastermindZkApp extends SmartContract {
       'Cannot submit a proof for a previous turn!'
     );
 
-    const maxAttemptsExceeded = proof.publicOutput.turnCount.greaterThanOrEqual(
+    const maxAttemptsExceeded = proof.publicOutput.turnCount.greaterThan(
       MAX_ATTEMPTS * 2
     );
 
@@ -309,9 +312,7 @@ class MastermindZkApp extends SmartContract {
     const isCodeMaster = codeMasterId.equals(winnerId);
     const isCodeBreaker = codeBreakerId.equals(winnerId);
 
-    const codeMasterWinByMaxAttempts = isSolved
-      .not()
-      .and(proof.publicOutput.turnCount.greaterThanOrEqual(MAX_ATTEMPTS * 2));
+    const codeMasterWinByMaxAttempts = isSolved.not().and(maxAttemptsExceeded);
 
     const codeBreakerWin = isSolved;
 
@@ -371,7 +372,7 @@ class MastermindZkApp extends SmartContract {
     const isCodeBreaker = codeBreakerId.equals(claimerId);
 
     const isCodeMasterLeft = turnCount
-      .lessThan(MAX_ATTEMPTS * 2)
+      .lessThanOrEqual(MAX_ATTEMPTS * 2)
       .and(turnCount.value.isEven())
       .and(isFinalized)
       .and(isSolved.not()); // maybe redundant
@@ -389,7 +390,7 @@ class MastermindZkApp extends SmartContract {
     // Code Master wins if the codeBreaker has reached the maximum number of attempts without solving the secret combination
     const codeMasterWinByMaxAttempts = isSolved
       .not()
-      .and(turnCount.greaterThanOrEqual(MAX_ATTEMPTS * 2));
+      .and(turnCount.greaterThan(MAX_ATTEMPTS * 2));
 
     const codeBreakerWin = isSolved;
 
