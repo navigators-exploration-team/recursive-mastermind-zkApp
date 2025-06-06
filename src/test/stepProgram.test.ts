@@ -194,9 +194,6 @@ describe('Mastermind ZkProgram Tests', () => {
 
   describe('Invalid game creation', () => {
     describe('Invalid range of digits', () => {
-
-
-
       it('Should reject codeMaster with invalid secret combination: first digit is greater than 7', async () => {
         const expectedErrorMessage =
           'Combination digit 1 is not in range [0, 7]!';

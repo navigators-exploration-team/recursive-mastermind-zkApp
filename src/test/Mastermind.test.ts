@@ -886,7 +886,6 @@ describe('Mastermind ZkApp Tests', () => {
         REWARD_AMOUNT = 1e10;
       });
 
-
       it('Reject initGame with invalid secret: first digit is greater than 7', async () => {
         const expectedMsg = 'Combination digit 1 is not in range [0, 7]!';
         await expectInitializeGameToFail(
@@ -898,7 +897,6 @@ describe('Mastermind ZkApp Tests', () => {
           expectedMsg
         );
       });
-
 
       it('Reject initGame with invalid secret: second digit is greater than 7', async () => {
         const expectedMsg = 'Combination digit 2 is not in range [0, 7]!';
@@ -998,8 +996,7 @@ describe('Mastermind ZkApp Tests', () => {
       });
 
       it('Should reject codeMaster with invalid secret combination: all digits same', async () => {
-        const expectedErrorMessage =
-          'Combination digit 2 is not unique!';
+        const expectedErrorMessage = 'Combination digit 2 is not unique!';
         await expectInitializeGameToFail(
           zkapp,
           codeMasterKey,
