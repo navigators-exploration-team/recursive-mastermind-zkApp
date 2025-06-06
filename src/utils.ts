@@ -11,7 +11,7 @@ export { Combination, Clue, GameState };
  * @method `toBits` - Converts the combination to a bit array.
  * @method `compress` - Compresses the combination into a single field element.
  * @method `decompress` - Decompresses the combination from a single field element.
- * @method `validate` - Validates the combination to ensure all digits are unique and within the range [1, 7].
+ * @method `validate` - Validates the combination to ensure all digits are unique and within the range [0, 7].
  * @method `updateHistory` - Updates the history of combinations with the new combination.
  * @method `getElementFromHistory` - Retrieves an element from the history based on the index.
  */
@@ -54,9 +54,8 @@ class Combination extends Struct({
   validate() {
     for (let i = 0; i < 4; i++) {
       this.digits[i]
-        .equals(0)
-        .or(this.digits[i].greaterThan(7))
-        .assertFalse(`Combination digit ${i + 1} is not in range [1, 7]!`);
+        .greaterThan(7)
+        .assertFalse(`Combination digit ${i + 1} is not in range [0, 7]!`);
     }
 
     for (let i = 1; i < 4; i++) {

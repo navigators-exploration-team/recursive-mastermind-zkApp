@@ -194,51 +194,30 @@ describe('Mastermind ZkProgram Tests', () => {
 
   describe('Invalid game creation', () => {
     describe('Invalid range of digits', () => {
-      it('Should reject codeMaster with invalid secret combination: first digit is 0', async () => {
-        const expectedErrorMessage =
-          'Combination digit 1 is not in range [1, 7]!';
-        await expectCreateGameToFail([0, 2, 3, 4], expectedErrorMessage);
-      });
 
-      it('Should reject codeMaster with invalid secret combination: second digit is 0', async () => {
-        const expectedErrorMessage =
-          'Combination digit 2 is not in range [1, 7]!';
-        await expectCreateGameToFail([5, 0, 4, 6], expectedErrorMessage);
-      });
 
-      it('Should reject codeMaster with invalid secret combination: third digit is 0', async () => {
-        const expectedErrorMessage =
-          'Combination digit 3 is not in range [1, 7]!';
-        await expectCreateGameToFail([7, 1, 0, 6], expectedErrorMessage);
-      });
-
-      it('Should reject codeMaster with invalid secret combination: fourth digit is 0', async () => {
-        const expectedErrorMessage =
-          'Combination digit 4 is not in range [1, 7]!';
-        await expectCreateGameToFail([2, 3, 4, 0], expectedErrorMessage);
-      });
 
       it('Should reject codeMaster with invalid secret combination: first digit is greater than 7', async () => {
         const expectedErrorMessage =
-          'Combination digit 1 is not in range [1, 7]!';
+          'Combination digit 1 is not in range [0, 7]!';
         await expectCreateGameToFail([8, 2, 3, 4], expectedErrorMessage);
       });
 
       it('Should reject codeMaster with invalid secret combination: second digit is greater than 7', async () => {
         const expectedErrorMessage =
-          'Combination digit 2 is not in range [1, 7]!';
+          'Combination digit 2 is not in range [0, 7]!';
         await expectCreateGameToFail([6, 9, 3, 4], expectedErrorMessage);
       });
 
       it('Should reject codeMaster with invalid secret combination: third digit is greater than 7', async () => {
         const expectedErrorMessage =
-          'Combination digit 3 is not in range [1, 7]!';
+          'Combination digit 3 is not in range [0, 7]!';
         await expectCreateGameToFail([2, 3, 10, 4], expectedErrorMessage);
       });
 
       it('Should reject codeMaster with invalid secret combination: fourth digit is greater than 7', async () => {
         const expectedErrorMessage =
-          'Combination digit 4 is not in range [1, 7]!';
+          'Combination digit 4 is not in range [0, 7]!';
         await expectCreateGameToFail([3, 6, 2, 11], expectedErrorMessage);
       });
     });
@@ -284,44 +263,24 @@ describe('Mastermind ZkProgram Tests', () => {
     });
 
     describe('Invalid guess', () => {
-      it('Should reject codeBreaker with invalid guess combination: first digit is 0', async () => {
-        const expectedErrorMessage =
-          'Combination digit 1 is not in range [1, 7]!';
-        await expectMakeGuessToFail([0, 2, 3, 4], expectedErrorMessage);
-      });
       it('Should reject codeBreaker with invalid guess combination: first digit is greater than 7', async () => {
         const expectedErrorMessage =
-          'Combination digit 1 is not in range [1, 7]!';
+          'Combination digit 1 is not in range [0, 7]!';
         await expectMakeGuessToFail([8, 2, 3, 4], expectedErrorMessage);
-      });
-      it('Should reject codeBreaker with invalid guess combination: second digit is 0', async () => {
-        const expectedErrorMessage =
-          'Combination digit 2 is not in range [1, 7]!';
-        await expectMakeGuessToFail([1, 0, 3, 4], expectedErrorMessage);
       });
       it('Should reject codeBreaker with invalid guess combination: second digit is greater than 7', async () => {
         const expectedErrorMessage =
-          'Combination digit 2 is not in range [1, 7]!';
+          'Combination digit 2 is not in range [0, 7]!';
         await expectMakeGuessToFail([1, 9, 3, 4], expectedErrorMessage);
-      });
-      it('Should reject codeBreaker with invalid guess combination: third digit is 0', async () => {
-        const expectedErrorMessage =
-          'Combination digit 3 is not in range [1, 7]!';
-        await expectMakeGuessToFail([1, 2, 0, 4], expectedErrorMessage);
       });
       it('Should reject codeBreaker with invalid guess combination: third digit is greater than 7', async () => {
         const expectedErrorMessage =
-          'Combination digit 3 is not in range [1, 7]!';
+          'Combination digit 3 is not in range [0, 7]!';
         await expectMakeGuessToFail([1, 2, 10, 4], expectedErrorMessage);
-      });
-      it('Should reject codeBreaker with invalid guess combination: fourth digit is 0', async () => {
-        const expectedErrorMessage =
-          'Combination digit 4 is not in range [1, 7]!';
-        await expectMakeGuessToFail([1, 2, 3, 0], expectedErrorMessage);
       });
       it('Should reject codeBreaker with invalid guess combination: fourth digit is greater than 7', async () => {
         const expectedErrorMessage =
-          'Combination digit 4 is not in range [1, 7]!';
+          'Combination digit 4 is not in range [0, 7]!';
         await expectMakeGuessToFail([1, 2, 3, 12], expectedErrorMessage);
       });
       it('Should reject codeBreaker with invalid guess combination: second digit is not unique', async () => {

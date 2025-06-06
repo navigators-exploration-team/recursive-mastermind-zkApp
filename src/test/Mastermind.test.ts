@@ -886,20 +886,9 @@ describe('Mastermind ZkApp Tests', () => {
         REWARD_AMOUNT = 1e10;
       });
 
-      it('Reject initGame with invalid secret: first digit is 0', async () => {
-        const expectedMsg = 'Combination digit 1 is not in range [1, 7]!';
-        await expectInitializeGameToFail(
-          zkapp,
-          codeMasterKey,
-          [0, 1, 2, 3],
-          codeMasterSalt,
-          refereeKey,
-          expectedMsg
-        );
-      });
 
       it('Reject initGame with invalid secret: first digit is greater than 7', async () => {
-        const expectedMsg = 'Combination digit 1 is not in range [1, 7]!';
+        const expectedMsg = 'Combination digit 1 is not in range [0, 7]!';
         await expectInitializeGameToFail(
           zkapp,
           codeMasterKey,
@@ -910,20 +899,9 @@ describe('Mastermind ZkApp Tests', () => {
         );
       });
 
-      it('Reject initGame with invalid secret: second digit is 0', async () => {
-        const expectedMsg = 'Combination digit 2 is not in range [1, 7]!';
-        await expectInitializeGameToFail(
-          zkapp,
-          codeMasterKey,
-          [7, 0, 2, 5],
-          codeMasterSalt,
-          refereeKey,
-          expectedMsg
-        );
-      });
 
       it('Reject initGame with invalid secret: second digit is greater than 7', async () => {
-        const expectedMsg = 'Combination digit 2 is not in range [1, 7]!';
+        const expectedMsg = 'Combination digit 2 is not in range [0, 7]!';
         await expectInitializeGameToFail(
           zkapp,
           codeMasterKey,
@@ -934,20 +912,8 @@ describe('Mastermind ZkApp Tests', () => {
         );
       });
 
-      it('Reject initGame with invalid secret: third digit is 0', async () => {
-        const expectedMsg = 'Combination digit 3 is not in range [1, 7]!';
-        await expectInitializeGameToFail(
-          zkapp,
-          codeMasterKey,
-          [7, 1, 0, 5],
-          codeMasterSalt,
-          refereeKey,
-          expectedMsg
-        );
-      });
-
       it('Reject initGame with invalid secret: third digit is greater than 7', async () => {
-        const expectedMsg = 'Combination digit 3 is not in range [1, 7]!';
+        const expectedMsg = 'Combination digit 3 is not in range [0, 7]!';
         await expectInitializeGameToFail(
           zkapp,
           codeMasterKey,
@@ -958,20 +924,8 @@ describe('Mastermind ZkApp Tests', () => {
         );
       });
 
-      it('Reject initGame with invalid secret: fourth digit is 0', async () => {
-        const expectedMsg = 'Combination digit 4 is not in range [1, 7]!';
-        await expectInitializeGameToFail(
-          zkapp,
-          codeMasterKey,
-          [3, 1, 2, 0],
-          codeMasterSalt,
-          refereeKey,
-          expectedMsg
-        );
-      });
-
       it('Reject initGame with invalid secret: fourth digit is greater than 7', async () => {
-        const expectedMsg = 'Combination digit 4 is not in range [1, 7]!';
+        const expectedMsg = 'Combination digit 4 is not in range [0, 7]!';
         await expectInitializeGameToFail(
           zkapp,
           codeMasterKey,
@@ -1032,7 +986,7 @@ describe('Mastermind ZkApp Tests', () => {
 
       it('Should reject codeMaster with invalid secret combination: all digits same and exceeding 7', async () => {
         const expectedErrorMessage =
-          'Combination digit 1 is not in range [1, 7]!';
+          'Combination digit 1 is not in range [0, 7]!';
         await expectInitializeGameToFail(
           zkapp,
           codeMasterKey,
@@ -1043,9 +997,9 @@ describe('Mastermind ZkApp Tests', () => {
         );
       });
 
-      it('Should reject codeMaster with invalid secret combination: all digits same and equal 0', async () => {
+      it('Should reject codeMaster with invalid secret combination: all digits same', async () => {
         const expectedErrorMessage =
-          'Combination digit 1 is not in range [1, 7]!';
+          'Combination digit 2 is not unique!';
         await expectInitializeGameToFail(
           zkapp,
           codeMasterKey,
