@@ -64,29 +64,17 @@ describe('utility.ts unit tests', () => {
         );
       });
 
-      it('should throw an error if the digits are above from range [1, 7]', () => {
+      it('should throw an error if the digits are above from range [0, 7]', () => {
         const combinationNumbers = [1, 2, 3, 8];
         expect(() => Combination.from(combinationNumbers)).toThrow(
-          'Combination digit 4 is not in range [1, 7]!'
-        );
-      });
-      it('should throw an error if the digits are below from range [1, 7]', () => {
-        const combinationNumbers = [1, 0, 3, 4];
-        expect(() => Combination.from(combinationNumbers)).toThrow(
-          'Combination digit 2 is not in range [1, 7]!'
+          'Combination digit 4 is not in range [0, 7]!'
         );
       });
 
-      it('should throw an error if the digits are not unique and above from range [1, 7]', () => {
+      it('should throw an error if the digits are not unique and above from range [0, 7]', () => {
         const combinationNumbers = [1, 1, 3, 8];
         expect(() => Combination.from(combinationNumbers)).toThrow(
-          'Combination digit 4 is not in range [1, 7]!'
-        );
-      });
-      it('should throw an error if the digits are not unique and below from range [1, 7]', () => {
-        const combinationNumbers = [1, 2, 2, 0];
-        expect(() => Combination.from(combinationNumbers)).toThrow(
-          'Combination digit 4 is not in range [1, 7]!'
+          'Combination digit 4 is not in range [0, 7]!'
         );
       });
     });
@@ -335,30 +323,14 @@ describe('utility.ts unit tests', () => {
           digits: [1, 2, 3, 8].map(Field),
         });
         expect(() => combination.validate()).toThrow(
-          'Combination digit 4 is not in range [1, 7]!'
+          'Combination digit 4 is not in range [0, 7]!'
         );
 
         const combination2 = new Combination({
           digits: [1, 2, 3, 9].map(Field),
         });
         expect(() => combination2.validate()).toThrow(
-          'Combination digit 4 is not in range [1, 7]!'
-        );
-      });
-
-      it('should throw an error for a combination with digits below range', () => {
-        const combination = new Combination({
-          digits: [1, 0, 3, 4].map(Field),
-        });
-        expect(() => combination.validate()).toThrow(
-          'Combination digit 2 is not in range [1, 7]!'
-        );
-
-        const combination2 = new Combination({
-          digits: [0, 2, 3, 4].map(Field),
-        });
-        expect(() => combination2.validate()).toThrow(
-          'Combination digit 1 is not in range [1, 7]!'
+          'Combination digit 4 is not in range [0, 7]!'
         );
       });
 
@@ -367,7 +339,7 @@ describe('utility.ts unit tests', () => {
           digits: [1, 1, 3, 8].map(Field),
         });
         expect(() => combination.validate()).toThrow(
-          'Combination digit 4 is not in range [1, 7]!'
+          'Combination digit 4 is not in range [0, 7]!'
         );
       });
 
@@ -376,7 +348,7 @@ describe('utility.ts unit tests', () => {
           digits: [1, 2, 2, 8].map(Field),
         });
         expect(() => combination.validate()).toThrow(
-          'Combination digit 4 is not in range [1, 7]!'
+          'Combination digit 4 is not in range [0, 7]!'
         );
       });
     });
