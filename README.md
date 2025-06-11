@@ -53,7 +53,7 @@
 ## Overview
 
 - The game involves two players: a `Code Master` and a `Code Breaker`.
-- Inspired by [mastermind-noir](https://github.com/vezenovm/mastermind-noir), this version replaces colored pegs with a combination of 4 unique, non-zero digits between `1` and `7`.
+- Inspired by [mastermind-noir](https://github.com/vezenovm/mastermind-noir), this version replaces colored pegs with a combination of 4 unique digits between `0` and `7`.
 
 ## Game Rules
 
@@ -70,18 +70,18 @@
 
   |        | P1  | P2  | P3  | P4  |
   | ------ | --- | --- | --- | --- |
-  | Secret | 5   | 9   | 3   | 4   |
-  | Guess  | 5   | 7   | 8   | 9   |
+  | Secret | 5   | 6   | 3   | 4   |
+  | Guess  | 5   | 7   | 2   | 6   |
 
   |      | Hits | Blows |
   | ---- | ---- | ----- |
   | Clue | 1    | 1     |
 
-  - Code Master's secret combination: **5 9 3 4**
-  - Code Breaker's guess: **5 7 8 9**
+  - Code Master's secret combination: **5 6 3 4**
+  - Code Breaker's guess: **5 7 2 6**
   - Result: `1` hit and `1` blow.
     - The hit is `5` in the first position.
-    - The blow is `9` in the fourth position.
+    - The blow is `6` in the fourth position.
 
 - The game continues with alternating guesses and clues until the Code Breaker achieves 4 hits and uncovers the secret combination or fails to do so within the **maximum allowed attempts = 7**.
 
@@ -122,6 +122,7 @@ The Mastermind zkApp uses all 8 available states.
   - `finalizeSlot` **(UInt32)** - the slot number when the game is hard finalized.
   - `turnCount` **(UInt8)** - the number of turns taken in the game.
   - `isSolved` **(Bool)** - indicates whether the secret combination has been solved.
+  - `lastPlayedSlot` **(UInt32)** - Updated to reflect the timestamp of the latest action; used as a reference in the fully on-chain fallback mode to enforce round-based penalization.
 
 ### codemasterId & codebreakerId
 
@@ -150,7 +151,7 @@ The Mastermind zkApp uses all 8 available states.
 - This state is a compressed state variable that stores the history of all guesses made by the Code Breaker. It uses `Combination` class to compress the state by using `updateHistory` method.
 
 - Each guess is represented as a single `Field` value, with the four digits packed into one `Field` with bit manipulation.
-- Each digit is represented as a 3-bit number, allowing for a range of `1` to `7`. The digits are combined and stored on-chain as a `12-bit * MAX_ATTEMPT` field in decimal.
+- Each digit is represented as a 3-bit number, allowing for a range of `0` to `7`. The digits are combined and stored on-chain as a `12-bit * MAX_ATTEMPT` field in decimal.
 
 ### packedClueHistory
 
@@ -179,7 +180,7 @@ This method should be called **first** and can be called **only once** to initia
 - The method executes successfully when the following conditions are met:
 
   - The game is not already initialized.
-  - The `secretCombination` is validated with the `Combination` class, which separates the digits and checks for uniqueness and `1` to `7` range through the `validate` method.
+  - The `secretCombination` is validated with the `Combination` class, which separates the digits and checks for uniqueness and `0` to `7` range through the `validate` method.
   - The `rewardAmount` is received from the caller and stored in the contract.
   - The secret combination is then hashed with the salt and stored on-chain as `solutionHash`.
 
@@ -250,7 +251,7 @@ This method should be called **first** and can be called **only once** to initia
   - The game is not finalized (i.e., the finalize slot has not been reached), and the game is not solved.
   - The caller is the code breaker.
   - The provided `guessCombination` is a valid guess.
-  - The `turnCount` is less than or equal the `2 * MAX_ATTEMPT = 14` and **odd** (i.e., it is the code breaker's turn).
+  - The `turnCount` is less than the `2 * MAX_ATTEMPT = 14` and **odd** (i.e., it is the code breaker's turn).
 
 - After all the preceding checks pass, the code breaker's guess combination is validated, stored on-chain, and the `turnCount` is incremented. This then awaits the code master to read the guess and provide a clue.
 
