@@ -1,4 +1,4 @@
-import { Field, Poseidon, PrivateKey } from 'o1js';
+import { Field, Poseidon, PrivateKey, PublicKey } from 'o1js';
 import {
   generateTestProofs,
   gameGuesses,
@@ -12,12 +12,14 @@ describe('Should generate StepProgramProof for given parameters', () => {
   let codeBreakerKey: PrivateKey;
   let codeMasterSalt: Field;
   let secret: number[];
+  let contractAddress: PublicKey;
 
   beforeAll(async () => {
     codeBreakerKey = PrivateKey.random();
     codeMasterKey = PrivateKey.random();
     codeMasterSalt = Field.random();
     secret = secretCombination;
+    contractAddress = PrivateKey.random().toPublicKey();
 
     await StepProgram.compile({
       proofsEnabled: false,
@@ -36,7 +38,8 @@ describe('Should generate StepProgramProof for given parameters', () => {
       salt,
       secret,
       codeBreakerKey,
-      codeMasterKey
+      codeMasterKey,
+      contractAddress
     );
 
     const publicOutputs = proof.publicOutput;
@@ -45,7 +48,11 @@ describe('Should generate StepProgramProof for given parameters', () => {
       proof.publicOutput.lastCompressedGuess
     ).digits;
 
-    const computedHash = Poseidon.hash([...outputNumbers, salt]);
+    const computedHash = Poseidon.hash([
+      ...outputNumbers,
+      salt,
+      ...contractAddress.toFields(),
+    ]);
 
     const solutionHash = proof.publicOutput.solutionHash;
     expect(solutionHash).not.toEqual(computedHash);
@@ -66,7 +73,8 @@ describe('Should generate StepProgramProof for given parameters', () => {
       salt,
       secret,
       codeBreakerKey,
-      codeMasterKey
+      codeMasterKey,
+      contractAddress
     );
 
     const publicOutputs = proof.publicOutput;
@@ -79,7 +87,11 @@ describe('Should generate StepProgramProof for given parameters', () => {
     const attemptList = actions.totalAttempts.slice(0, rounds - 1);
     attemptList.push(secretCombination);
 
-    const computedHash = Poseidon.hash([...outputNumbers, salt]);
+    const computedHash = Poseidon.hash([
+      ...outputNumbers,
+      salt,
+      ...contractAddress.toFields(),
+    ]);
     const solutionHash = publicOutputs.solutionHash;
 
     expect(solutionHash).toEqual(computedHash);
@@ -101,6 +113,7 @@ describe('Should generate StepProgramProof for given parameters', () => {
       secret,
       codeBreakerKey,
       codeMasterKey,
+      contractAddress,
       gameGuesses
     );
 
@@ -110,7 +123,11 @@ describe('Should generate StepProgramProof for given parameters', () => {
       proof.publicOutput.lastCompressedGuess
     ).digits;
 
-    const computedHash = Poseidon.hash([...outputNumbers, salt]);
+    const computedHash = Poseidon.hash([
+      ...outputNumbers,
+      salt,
+      ...contractAddress.toFields(),
+    ]);
     const solutionHash = publicOutputs.solutionHash;
 
     expect(solutionHash).not.toEqual(computedHash);
@@ -132,6 +149,7 @@ describe('Should generate StepProgramProof for given parameters', () => {
       secret,
       codeBreakerKey,
       codeMasterKey,
+      contractAddress,
       gameGuesses
     );
 
@@ -150,10 +168,18 @@ describe('Should generate StepProgramProof for given parameters', () => {
     );
     const attemptList = gameGuesses.totalAttempts.slice(0, rounds);
 
-    const computedHash = Poseidon.hash([...outputNumbers, salt]);
+    const computedHash = Poseidon.hash([
+      ...outputNumbers,
+      salt,
+      ...contractAddress.toFields(),
+    ]);
     let secretDigits = secret.map(Field);
 
-    const myHash = Poseidon.hash([...secretDigits, salt]);
+    const myHash = Poseidon.hash([
+      ...secretDigits,
+      salt,
+      ...contractAddress.toFields(),
+    ]);
     const solutionHash = proof.publicOutput.solutionHash;
 
     expect(myHash).toEqual(solutionHash);
@@ -179,6 +205,7 @@ describe('Should generate StepProgramProof for given parameters', () => {
       secret,
       codeBreakerKey,
       codeMasterKey,
+      contractAddress,
       gameGuesses
     );
 
@@ -198,7 +225,11 @@ describe('Should generate StepProgramProof for given parameters', () => {
     const attemptList = actions.totalAttempts.slice(0, rounds - 1);
     attemptList.push(secretCombination);
 
-    const computedHash = Poseidon.hash([...outputNumbers, salt]);
+    const computedHash = Poseidon.hash([
+      ...outputNumbers,
+      salt,
+      ...contractAddress.toFields(),
+    ]);
     const solutionHash = publicOutputs.solutionHash;
 
     expect(separatedHistory).toEqual(attemptList);
@@ -221,6 +252,7 @@ describe('Should generate StepProgramProof for given parameters', () => {
       secret,
       codeBreakerKey,
       codeMasterKey,
+      contractAddress,
       gameGuesses
     );
 
@@ -239,7 +271,11 @@ describe('Should generate StepProgramProof for given parameters', () => {
 
     const attemptList = gameGuesses.totalAttempts.slice(0, rounds);
 
-    const computedHash = Poseidon.hash([...outputNumbers, salt]);
+    const computedHash = Poseidon.hash([
+      ...outputNumbers,
+      salt,
+      ...contractAddress.toFields(),
+    ]);
     const solutionHash = publicOutputs.solutionHash;
 
     expect(separatedHistory).toEqual(attemptList);
