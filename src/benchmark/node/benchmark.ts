@@ -458,10 +458,12 @@ async function solveBenchmark(secret: number[], steps: Combination[]) {
         authSignature: Signature.create(codeMasterKey, [
           ...secretCombination.digits,
           codeMasterSalt,
+          ...zkappAddress.toFields(),
         ]),
       },
       secretCombination,
-      codeMasterSalt
+      codeMasterSalt,
+      zkappAddress
     )
   ).proof;
   end = performance.now();
@@ -477,10 +479,12 @@ async function solveBenchmark(secret: number[], steps: Combination[]) {
           authSignature: Signature.create(codeBreakerKey, [
             ...step.digits,
             lastProof.publicOutput.turnCount.value,
+            ...zkappAddress.toFields(),
           ]),
         },
         lastProof,
-        step
+        step,
+        zkappAddress
       )
     ).proof;
     end = performance.now();
@@ -495,11 +499,13 @@ async function solveBenchmark(secret: number[], steps: Combination[]) {
             ...secretCombination.digits,
             codeMasterSalt,
             lastProof.publicOutput.turnCount.value,
+            ...zkappAddress.toFields(),
           ]),
         },
         lastProof,
         secretCombination,
-        codeMasterSalt
+        codeMasterSalt,
+        zkappAddress
       )
     ).proof;
     end = performance.now();
