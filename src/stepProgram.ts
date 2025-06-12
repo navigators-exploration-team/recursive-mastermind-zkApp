@@ -55,23 +55,32 @@ const StepProgram = ZkProgram({
      * @returns the proof of the new game and the public output.
      */
     createGame: {
-      privateInputs: [Combination, Field],
+      privateInputs: [Combination, Field, PublicKey],
       async method(
         authInputs: PublicInputs,
         secretCombination: Combination,
-        salt: Field
+        salt: Field,
+        contractAddress: PublicKey
       ) {
         secretCombination.validate();
 
         authInputs.authSignature
-          .verify(authInputs.authPubKey, [...secretCombination.digits, salt])
+          .verify(authInputs.authPubKey, [
+            ...secretCombination.digits,
+            salt,
+            ...contractAddress.toFields(),
+          ])
           .assertTrue('Invalid signature!');
 
         return {
           publicOutput: new PublicOutputs({
             codeMasterId: Poseidon.hash(authInputs.authPubKey.toFields()),
             codeBreakerId: Field.from(0),
-            solutionHash: Poseidon.hash([...secretCombination.digits, salt]),
+            solutionHash: Poseidon.hash([
+              ...secretCombination.digits,
+              salt,
+              ...contractAddress.toFields(),
+            ]),
             lastCompressedGuess: Field.from(0),
             lastcompressedClue: Field.from(0),
             turnCount: UInt8.from(1),
@@ -92,11 +101,12 @@ const StepProgram = ZkProgram({
      * The codeBreaker can only make a guess if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
      */
     makeGuess: {
-      privateInputs: [SelfProof, Combination],
+      privateInputs: [SelfProof, Combination, PublicKey],
       async method(
         authInputs: PublicInputs,
         previousClue: SelfProof<PublicInputs, PublicOutputs>,
-        guessCombination: Combination
+        guessCombination: Combination,
+        contractAddress: PublicKey
       ) {
         previousClue.verify();
         guessCombination.validate();
@@ -120,6 +130,7 @@ const StepProgram = ZkProgram({
           .verify(authInputs.authPubKey, [
             ...guessCombination.digits,
             turnCount,
+            ...contractAddress.toFields(),
           ])
           .assertTrue('Invalid signature!');
 
@@ -156,12 +167,13 @@ const StepProgram = ZkProgram({
      * The codeMaster can only give a clue if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
      */
     giveClue: {
-      privateInputs: [SelfProof, Combination, Field],
+      privateInputs: [SelfProof, Combination, Field, PublicKey],
       async method(
         authInputs: PublicInputs,
         previousGuess: SelfProof<PublicInputs, PublicOutputs>,
         secretCombination: Combination,
-        salt: Field
+        salt: Field,
+        contractAddress: PublicKey
       ) {
         previousGuess.verify();
 
@@ -178,7 +190,11 @@ const StepProgram = ZkProgram({
         );
 
         previousGuess.publicOutput.solutionHash.assertEquals(
-          Poseidon.hash([...secretCombination.digits, salt]),
+          Poseidon.hash([
+            ...secretCombination.digits,
+            salt,
+            ...contractAddress.toFields(),
+          ]),
           'The secret combination is not compliant with the initial hash from game creation!'
         );
 
@@ -187,6 +203,7 @@ const StepProgram = ZkProgram({
             ...secretCombination.digits,
             salt,
             turnCount,
+            ...contractAddress.toFields(),
           ])
           .assertTrue('Invalid signature!');
 
