@@ -2329,6 +2329,24 @@ describe('Mastermind ZkApp Tests', () => {
       ).toEqual(15n);
     });
 
+    it('Code breaker should not be able to continue game with makeGuess', async () => {
+      const guessCombination = Combination.from([3, 1, 5, 2]);
+      await expectMakeGuessToFail(
+        codeBreakerPubKey,
+        codeBreakerKey,
+        guessCombination,
+        'The game secret has already been solved!'
+      );
+    });
+
+    it('Code master should not be able to claim reward', async () => {
+      await expectClaimRewardToFail(
+        codeMasterPubKey,
+        codeMasterKey,
+        'You are not the winner of this game!'
+      );
+    });
+
     it('Claim reward', async () => {
       await claimReward(codeBreakerPubKey, codeBreakerKey);
     });
