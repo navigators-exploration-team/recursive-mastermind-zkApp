@@ -22,6 +22,8 @@ describe('Mastermind ZkProgram Tests', () => {
   let codeBreakerPubKey: PublicKey;
   let codeBreakerId: Field;
 
+  let contractAddress: PublicKey;
+
   // Compressed secret combination for codeMaster
   let secretNumbers: number[];
   let secretCombination: Combination;
@@ -44,6 +46,8 @@ describe('Mastermind ZkProgram Tests', () => {
     codeMasterKey = PrivateKey.random();
     codeMasterPubKey = codeMasterKey.toPublicKey();
     codeMasterId = Poseidon.hash(codeMasterPubKey.toFields());
+
+    contractAddress = PrivateKey.random().toPublicKey();
 
     // Generate secret combination for the codeMaster
     secretNumbers = [1, 2, 3, 4];
@@ -69,7 +73,12 @@ describe('Mastermind ZkProgram Tests', () => {
     expectedErrorMessage?: string
   ) {
     await expect(async () => {
-      await StepProgramCreateGame(combination, codeMasterSalt, codeMasterKey);
+      await StepProgramCreateGame(
+        combination,
+        codeMasterSalt,
+        codeMasterKey,
+        contractAddress
+      );
     }).rejects.toThrowError(expectedErrorMessage);
   }
   async function expectMakeGuessToFail(
@@ -80,7 +89,9 @@ describe('Mastermind ZkProgram Tests', () => {
       wrongPubKey: boolean;
       wrongMessage: boolean;
       wrongSigner: boolean;
-    }
+      wrongContractAddress?: boolean;
+    },
+    _contractAddress = contractAddress
   ) {
     const makeGuess = invalidSignatureConfig
       ? async () => {
@@ -88,11 +99,17 @@ describe('Mastermind ZkProgram Tests', () => {
             lastProof,
             guess,
             signerKey,
-            invalidSignatureConfig
+            invalidSignatureConfig,
+            _contractAddress
           );
         }
       : async () => {
-          await StepProgramMakeGuess(lastProof, guess, signerKey);
+          await StepProgramMakeGuess(
+            lastProof,
+            guess,
+            signerKey,
+            _contractAddress
+          );
         };
     if (expectedErrorMessage)
       await expect(makeGuess).rejects.toThrowError(expectedErrorMessage);
@@ -108,7 +125,9 @@ describe('Mastermind ZkProgram Tests', () => {
       wrongPubKey: boolean;
       wrongMessage: boolean;
       wrongSigner: boolean;
-    }
+      wrongContractAddress?: boolean;
+    },
+    _contractAddress = contractAddress
   ) {
     const giveClue = invalidSignatureConfig
       ? async () => {
@@ -117,7 +136,8 @@ describe('Mastermind ZkProgram Tests', () => {
             combination,
             signerSalt,
             signerKey,
-            invalidSignatureConfig
+            invalidSignatureConfig,
+            _contractAddress
           );
         }
       : async () => {
@@ -125,7 +145,8 @@ describe('Mastermind ZkProgram Tests', () => {
             lastProof,
             combination,
             signerSalt,
-            signerKey
+            signerKey,
+            _contractAddress
           );
         };
 
@@ -146,7 +167,8 @@ describe('Mastermind ZkProgram Tests', () => {
     lastProof = await StepProgramMakeGuess(
       lastProof,
       lastGuessNumbers,
-      codeBreakerKey
+      codeBreakerKey,
+      contractAddress
     );
 
     guessCount++;
@@ -157,7 +179,8 @@ describe('Mastermind ZkProgram Tests', () => {
       lastProof,
       secretNumbers,
       codeMasterSalt,
-      codeMasterKey
+      codeMasterKey,
+      contractAddress
     );
 
     lastClue = Clue.giveClue(lastGuess.digits, secretCombination.digits);
@@ -188,7 +211,11 @@ describe('Mastermind ZkProgram Tests', () => {
     expect(_publicOutput.packedGuessHistory).toEqual(_packedGuessHistory);
     expect(_publicOutput.turnCount).toEqual(_turnCount);
     expect(_publicOutput.solutionHash).toEqual(
-      Poseidon.hash([...secretCombination.digits, codeMasterSalt])
+      Poseidon.hash([
+        ...secretCombination.digits,
+        codeMasterSalt,
+        ...contractAddress.toFields(),
+      ])
     );
   }
 
@@ -247,7 +274,8 @@ describe('Mastermind ZkProgram Tests', () => {
       lastProof = await StepProgramCreateGame(
         secretNumbers,
         codeMasterSalt,
-        codeMasterKey
+        codeMasterKey,
+        contractAddress
       );
 
       expectedPublicOutput(
@@ -773,7 +801,8 @@ describe('Mastermind ZkProgram Tests', () => {
       lastProof = await StepProgramCreateGame(
         secretNumbers,
         codeMasterSalt,
-        codeMasterKey
+        codeMasterKey,
+        contractAddress
       );
 
       expectedPublicOutput(

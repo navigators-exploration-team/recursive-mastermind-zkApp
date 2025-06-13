@@ -300,10 +300,12 @@ const functions = {
         authSignature: Signature.create(state.codeMasterKey!, [
           ...state.secretCombination!.digits,
           state.codeMasterSalt!,
+          ...state.zkapp!.address.toFields(),
         ]),
       },
       state.secretCombination!,
-      state.codeMasterSalt!
+      state.codeMasterSalt!,
+      state.zkapp!.address
     );
     end = performance.now();
     state.benchmarkResults.baseGameSeconds = (end - start) / 1000;
@@ -318,10 +320,12 @@ const functions = {
             authSignature: Signature.create(state.codeBreakerKey!, [
               ...step.digits,
               proof.publicOutput.turnCount.value,
+              ...state.zkapp!.address.toFields(),
             ]),
           },
           proof,
-          step
+          step,
+          state.zkapp!.address
         )
       ).proof;
       end = performance.now();
@@ -337,11 +341,13 @@ const functions = {
               ...state.secretCombination!.digits,
               state.codeMasterSalt!,
               proof.publicOutput.turnCount.value,
+              ...state.zkapp!.address.toFields(),
             ]),
           },
           proof,
           state.secretCombination!,
-          state.codeMasterSalt!
+          state.codeMasterSalt!,
+          state.zkapp!.address
         )
       ).proof;
       end = performance.now();
