@@ -52,6 +52,7 @@ const StepProgram = ZkProgram({
      * Signature message should be the concatenation of the **secret combination** digits and `salt`.
      * @param secretCombination secret combination to be solved by the codeBreaker.
      * @param salt the salt to be used in the hash function to prevent pre-image attacks.
+     * @param contractAddress the address of the corresponding contract.
      * @returns the proof of the new game and the public output.
      */
     createGame: {
@@ -97,6 +98,7 @@ const StepProgram = ZkProgram({
      * Signature message should be the concatenation of the `guessCombination` and `turnCount`.
      * @param previousClue the proof of the previous game state. It contains the last clue given by the codeMaster.
      * @param guessCombination the guess made by the codeBreaker.
+     * @param contractAddress the address of the corresponding contract.
      * @returns the proof of the updated game state and the public output.
      * The codeBreaker can only make a guess if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
      */
@@ -163,6 +165,7 @@ const StepProgram = ZkProgram({
      * @param previousGuess the proof of the previous game state. It contains the last guess made by the codeBreaker.
      * @param secretCombination the secret combination to be solved by the codeBreaker.
      * @param salt the salt to be used in the hash function to prevent pre-image attacks.
+     * @param contractAddress the address of the corresponding contract.
      * @returns the proof of the updated game state and the public output.
      * The codeMaster can only give a clue if it is their turn and the secret combination is not solved yet, and if they have not reached the limit number of attempts.
      */
