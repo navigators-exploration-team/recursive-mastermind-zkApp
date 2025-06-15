@@ -201,7 +201,7 @@ function generateRandomGuess(secret: number[]): number[] {
   }
   let output = Array.from(numbers);
 
-  if (output === secret) {
+  if (secret.every((num, index) => num === output[index])) {
     return generateRandomGuess(secret);
   }
 
@@ -319,6 +319,10 @@ const generateTestProofs = async (
   contractAddress: PublicKey,
   guesses?: typeof gameGuesses
 ): Promise<StepProgramProof> => {
+  if (rounds < 1 || rounds > 7) {
+    throw new Error('Rounds must be between 1 and 7!');
+  }
+
   let lastProof = await StepProgramCreateGame(
     secret,
     salt,
@@ -349,11 +353,6 @@ const generateTestProofs = async (
           );
     return lastProof;
   } else if (flag === 'codebreaker-victory') {
-    if (rounds > 7)
-      throw new Error(
-        "Maximum attempts for codebreaker victory case can't be more than 7!"
-      );
-
     lastProof =
       guesses === undefined
         ? await generateRecursiveRandomProof(
@@ -392,12 +391,6 @@ const generateTestProofs = async (
       contractAddress
     );
   } else if (flag === 'unsolved') {
-    if (guesses)
-      if (rounds > 7)
-        throw new Error(
-          "Maximum attempts for unsolved case can't be more than 7!"
-        );
-
     lastProof =
       guesses === undefined
         ? await generateRecursiveRandomProof(

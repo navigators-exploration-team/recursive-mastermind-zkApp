@@ -1288,15 +1288,6 @@ describe('Mastermind ZkApp Tests', () => {
     });
 
     it('Submit with partial game proof', async () => {
-      console.log(partialProof.publicOutput.solutionHash.toBigInt());
-      console.log(zkapp.solutionHash.get().toBigInt());
-      console.log(
-        Poseidon.hash([
-          ...Combination.from(secretCombination).digits,
-          codeMasterSalt,
-          ...zkappAddress.toFields(),
-        ]).toBigInt()
-      );
       await submitGameProof(partialProof, codeBreakerPubKey, false);
     });
 
