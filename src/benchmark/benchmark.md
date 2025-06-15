@@ -15,10 +15,10 @@ This report summarizes the circuit analysis, compilation times, and per-step ben
 
 | Method     | Rows |
 | ---------- | ---- |
-| createGame | 523  |
-| giveClue   | 653  |
-| makeGuess  | 821  |
-| **Total**  | 1997 |
+| createGame | 536  |
+| giveClue   | 679  |
+| makeGuess  | 820  |
+| **Total**  | 2035 |
 
 ---
 
@@ -26,14 +26,14 @@ This report summarizes the circuit analysis, compilation times, and per-step ben
 
 | Method          | Rows  |
 | --------------- | ----- |
-| initGame        | 1337  |
-| acceptGame      | 1494  |
-| submitGameProof | 1319  |
-| claimReward     | 1372  |
-| forfeitWin      | 1419  |
-| makeGuess       | 1576  |
-| giveClue        | 1588  |
-| **Total**       | 10105 |
+| initGame        | 1349  |
+| acceptGame      | 1557  |
+| submitGameProof | 1377  |
+| claimReward     | 1463  |
+| forfeitWin      | 1435  |
+| makeGuess       | 1626  |
+| giveClue        | 1665  |
+| **Total**       | 10472 |
 
 ### Compilation Times
 
