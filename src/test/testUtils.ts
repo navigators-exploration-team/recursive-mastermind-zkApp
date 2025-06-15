@@ -1,4 +1,4 @@
-import { Field, PrivateKey, Signature } from 'o1js';
+import { Field, PrivateKey, PublicKey, Signature } from 'o1js';
 import { StepProgram, StepProgramProof } from '../stepProgram.js';
 import { Combination } from '../utils.js';
 
@@ -19,7 +19,8 @@ export {
 const StepProgramCreateGame = async (
   secret: number[],
   salt: Field,
-  codeMasterKey: PrivateKey
+  codeMasterKey: PrivateKey,
+  contractAddress: PublicKey
 ): Promise<StepProgramProof> => {
   const secretCombination = Combination.from(secret);
 
@@ -29,10 +30,12 @@ const StepProgramCreateGame = async (
       authSignature: Signature.create(codeMasterKey, [
         ...secretCombination.digits,
         salt,
+        ...contractAddress.toFields(),
       ]),
     },
     secretCombination,
-    salt
+    salt,
+    contractAddress
   );
   return proof;
 };
@@ -43,7 +46,8 @@ const StepProgramCreateGame = async (
 const StepProgramMakeGuess = async (
   prevProof: StepProgramProof,
   guess: number[],
-  codeBreakerKey: PrivateKey
+  codeBreakerKey: PrivateKey,
+  contractAddress: PublicKey
 ): Promise<StepProgramProof> => {
   const guessCombination = Combination.from(guess);
   const { proof } = await StepProgram.makeGuess(
@@ -52,10 +56,12 @@ const StepProgramMakeGuess = async (
       authSignature: Signature.create(codeBreakerKey, [
         ...guessCombination.digits,
         prevProof.publicOutput.turnCount.value,
+        ...contractAddress.toFields(),
       ]),
     },
     prevProof,
-    guessCombination
+    guessCombination,
+    contractAddress
   );
   return proof;
 };
@@ -68,15 +74,24 @@ const StepProgramMakeGuessInvalidSignature = async (
     wrongPubKey: boolean;
     wrongMessage: boolean;
     wrongSigner: boolean;
-  }
+    wrongContractAddress?: boolean;
+  },
+  contractAddress: PublicKey
 ): Promise<void> => {
   const guessCombination = Combination.from(guess);
   const randomKey = PrivateKey.random();
+  const randomContractAddress = PrivateKey.random().toPublicKey();
   const authSignature = Signature.create(
     config.wrongSigner ? randomKey : codeBreakerKey,
     config.wrongMessage
       ? Array.from({ length: 4 }, () => Field.random())
-      : [...guessCombination.digits, prevProof.publicOutput.turnCount.value]
+      : [
+          ...guessCombination.digits,
+          prevProof.publicOutput.turnCount.value,
+          ...(config.wrongContractAddress
+            ? randomContractAddress.toFields()
+            : contractAddress.toFields()),
+        ]
   );
 
   await StepProgram.makeGuess(
@@ -87,7 +102,8 @@ const StepProgramMakeGuessInvalidSignature = async (
       authSignature,
     },
     prevProof,
-    guessCombination
+    guessCombination,
+    config.wrongContractAddress ? randomContractAddress : contractAddress
   );
 };
 
@@ -98,7 +114,8 @@ const StepProgramGiveClue = async (
   prevProof: StepProgramProof,
   combination: number[],
   salt: Field,
-  codeMasterKey: PrivateKey
+  codeMasterKey: PrivateKey,
+  contractAddress: PublicKey
 ): Promise<StepProgramProof> => {
   const secretCombination = Combination.from(combination);
   const { proof } = await StepProgram.giveClue(
@@ -108,11 +125,13 @@ const StepProgramGiveClue = async (
         ...secretCombination.digits,
         salt,
         prevProof.publicOutput.turnCount.value,
+        ...contractAddress.toFields(),
       ]),
     },
     prevProof,
     secretCombination,
-    salt
+    salt,
+    contractAddress
   );
   return proof;
 };
@@ -126,10 +145,13 @@ const StepProgramGiveClueInvalidSignature = async (
     wrongPubKey: boolean;
     wrongMessage: boolean;
     wrongSigner: boolean;
-  }
+    wrongContractAddress?: boolean;
+  },
+  contractAddress: PublicKey
 ): Promise<void> => {
   const secretCombination = Combination.from(combination);
   const randomKey = PrivateKey.random();
+  const randomContractAddress = PrivateKey.random().toPublicKey();
   const authSignature = Signature.create(
     config.wrongSigner ? randomKey : codeMasterKey,
     config.wrongMessage
@@ -138,6 +160,9 @@ const StepProgramGiveClueInvalidSignature = async (
           ...secretCombination.digits,
           salt,
           prevProof.publicOutput.turnCount.value,
+          ...(config.wrongContractAddress
+            ? randomContractAddress.toFields()
+            : contractAddress.toFields()),
         ]
   );
 
@@ -150,7 +175,8 @@ const StepProgramGiveClueInvalidSignature = async (
     },
     prevProof,
     secretCombination,
-    salt
+    salt,
+    config.wrongContractAddress ? randomContractAddress : contractAddress
   );
 };
 
@@ -175,7 +201,7 @@ function generateRandomGuess(secret: number[]): number[] {
   }
   let output = Array.from(numbers);
 
-  if (output === secret) {
+  if (secret.every((num, index) => num === output[index])) {
     return generateRandomGuess(secret);
   }
 
@@ -197,19 +223,26 @@ async function generateRecursiveRandomProof(
   salt: Field,
   secret: number[],
   codeBreakerKey: PrivateKey,
-  codeMasterKey: PrivateKey
+  codeMasterKey: PrivateKey,
+  contractAddress: PublicKey
 ): Promise<StepProgramProof> {
   let guess;
   for (let i = 0; i < rounds; i++) {
     guess = generateRandomGuess(secret);
 
-    lastProof = await StepProgramMakeGuess(lastProof, guess, codeBreakerKey);
+    lastProof = await StepProgramMakeGuess(
+      lastProof,
+      guess,
+      codeBreakerKey,
+      contractAddress
+    );
 
     lastProof = await StepProgramGiveClue(
       lastProof,
       secret,
       salt,
-      codeMasterKey
+      codeMasterKey,
+      contractAddress
     );
   }
   return lastProof;
@@ -230,7 +263,8 @@ async function generateRecursiveGuessProof(
   salt: Field,
   secret: number[],
   codeBreakerKey: PrivateKey,
-  codeMasterKey: PrivateKey
+  codeMasterKey: PrivateKey,
+  contractAddress: PublicKey
 ): Promise<StepProgramProof> {
   let guess;
   const guesses = gameGuesses.totalAttempts;
@@ -246,13 +280,19 @@ async function generateRecursiveGuessProof(
   for (let i = 0; i < rounds; i++) {
     guess = guesses[i];
 
-    lastProof = await StepProgramMakeGuess(lastProof, guess, codeBreakerKey);
+    lastProof = await StepProgramMakeGuess(
+      lastProof,
+      guess,
+      codeBreakerKey,
+      contractAddress
+    );
 
     lastProof = await StepProgramGiveClue(
       lastProof,
       secret,
       salt,
-      codeMasterKey
+      codeMasterKey,
+      contractAddress
     );
   }
 
@@ -276,9 +316,19 @@ const generateTestProofs = async (
   secret: number[],
   codeBreakerKey: PrivateKey,
   codeMasterKey: PrivateKey,
+  contractAddress: PublicKey,
   guesses?: typeof gameGuesses
 ): Promise<StepProgramProof> => {
-  let lastProof = await StepProgramCreateGame(secret, salt, codeMasterKey);
+  if (rounds < 1 || rounds > 7) {
+    throw new Error('Rounds must be between 1 and 7!');
+  }
+
+  let lastProof = await StepProgramCreateGame(
+    secret,
+    salt,
+    codeMasterKey,
+    contractAddress
+  );
 
   if (flag === 'codemaster-victory') {
     lastProof =
@@ -289,7 +339,8 @@ const generateTestProofs = async (
             salt,
             secret,
             codeBreakerKey,
-            codeMasterKey
+            codeMasterKey,
+            contractAddress
           )
         : await generateRecursiveGuessProof(
             rounds,
@@ -297,15 +348,11 @@ const generateTestProofs = async (
             salt,
             secret,
             codeBreakerKey,
-            codeMasterKey
+            codeMasterKey,
+            contractAddress
           );
     return lastProof;
   } else if (flag === 'codebreaker-victory') {
-    if (rounds > 7)
-      throw new Error(
-        "Maximum attempts for codebreaker victory case can't be more than 7!"
-      );
-
     lastProof =
       guesses === undefined
         ? await generateRecursiveRandomProof(
@@ -314,7 +361,8 @@ const generateTestProofs = async (
             salt,
             secret,
             codeBreakerKey,
-            codeMasterKey
+            codeMasterKey,
+            contractAddress
           )
         : await generateRecursiveGuessProof(
             rounds - 1,
@@ -322,21 +370,27 @@ const generateTestProofs = async (
             salt,
             secret,
             codeBreakerKey,
-            codeMasterKey
+            codeMasterKey,
+            contractAddress
           );
 
     // Last step that simulates the correct secret submission by codeBreaker.
-    lastProof = await StepProgramMakeGuess(lastProof, secret, codeBreakerKey);
+    lastProof = await StepProgramMakeGuess(
+      lastProof,
+      secret,
+      codeBreakerKey,
+      contractAddress
+    );
 
     // Return the last proof that result is checked by codeMaster.
-    return await StepProgramGiveClue(lastProof, secret, salt, codeMasterKey);
+    return await StepProgramGiveClue(
+      lastProof,
+      secret,
+      salt,
+      codeMasterKey,
+      contractAddress
+    );
   } else if (flag === 'unsolved') {
-    if (guesses)
-      if (rounds > 7)
-        throw new Error(
-          "Maximum attempts for unsolved case can't be more than 7!"
-        );
-
     lastProof =
       guesses === undefined
         ? await generateRecursiveRandomProof(
@@ -345,7 +399,8 @@ const generateTestProofs = async (
             salt,
             secret,
             codeBreakerKey,
-            codeMasterKey
+            codeMasterKey,
+            contractAddress
           )
         : await generateRecursiveGuessProof(
             rounds,
@@ -353,7 +408,8 @@ const generateTestProofs = async (
             salt,
             secret,
             codeBreakerKey,
-            codeMasterKey
+            codeMasterKey,
+            contractAddress
           );
 
     return lastProof;

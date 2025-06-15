@@ -50,7 +50,6 @@ class ForfeitGameEvent extends Struct({
 class ProofSubmissionEvent extends Struct({
   turnCount: UInt8,
   isSolved: Bool,
-  maxAttemptsExceeded: Bool,
 }) {}
 
 class MastermindZkApp extends SmartContract {
@@ -184,7 +183,13 @@ class MastermindZkApp extends SmartContract {
       isSolved: Bool(false),
     });
 
-    this.solutionHash.set(Poseidon.hash([...secretCombination.digits, salt]));
+    this.solutionHash.set(
+      Poseidon.hash([
+        ...secretCombination.digits,
+        salt,
+        ...this.address.toFields(),
+      ])
+    );
     this.codeMasterId.set(Poseidon.hash(codeMasterPubKey.toFields()));
     this.refereeId.set(Poseidon.hash(refereePubKey.toFields()));
     this.compressedState.set(gameState.pack());
@@ -300,19 +305,25 @@ class MastermindZkApp extends SmartContract {
       'Cannot submit a proof for a previous turn!'
     );
 
-    const maxAttemptsExceeded = proof.publicOutput.turnCount.greaterThan(
-      MAX_ATTEMPTS * 2
-    );
-
     const clue = Clue.decompress(proof.publicOutput.lastcompressedClue);
-    isSolved = clue.isSolved().and(maxAttemptsExceeded.not());
+    // to classify game is solved:
+    // - clue must be true
+    // - turnCount should <= MAX_ATTEMPTS * 2 + 1
+    isSolved = clue
+      .isSolved()
+      .and(proof.publicOutput.turnCount.lessThan((MAX_ATTEMPTS + 1) * 2));
 
     const winnerId = Poseidon.hash(winnerPubKey.toFields());
 
     const isCodeMaster = codeMasterId.equals(winnerId);
     const isCodeBreaker = codeBreakerId.equals(winnerId);
 
-    const codeMasterWinByMaxAttempts = isSolved.not().and(maxAttemptsExceeded);
+    // to classify game is not solved within MAX_ATTEMPTS
+    // - clue must be false
+    // - turnCount should > MAX_ATTEMPTS * 2
+    const codeMasterWinByMaxAttempts = isSolved
+      .not()
+      .and(proof.publicOutput.turnCount.greaterThan(MAX_ATTEMPTS * 2));
 
     const codeBreakerWin = isSolved;
 
@@ -345,7 +356,6 @@ class MastermindZkApp extends SmartContract {
       new ProofSubmissionEvent({
         turnCount: proof.publicOutput.turnCount,
         isSolved,
-        maxAttemptsExceeded,
       })
     );
   }
@@ -574,7 +584,11 @@ class MastermindZkApp extends SmartContract {
     this.solutionHash
       .getAndRequireEquals()
       .assertEquals(
-        Poseidon.hash([...secretCombination.digits, salt]),
+        Poseidon.hash([
+          ...secretCombination.digits,
+          salt,
+          ...this.address.toFields(),
+        ]),
         'The secret combination is not compliant with the stored hash on-chain!'
       );
 
